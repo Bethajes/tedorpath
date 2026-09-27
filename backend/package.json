@@ -1,0 +1,29 @@
+{
+  "name": "tedorpath-backend",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "main.js",
+  "scripts": {
+    "dev": "node --watch main.js",
+    "start": "node main.js",
+    "db:generate": "prisma generate",
+    "db:migrate": "prisma migrate deploy",
+    "db:migrate:dev": "prisma migrate dev",
+    "db:status": "prisma migrate status",
+    "db:studio": "prisma studio",
+    "setup": "prisma generate && prisma migrate deploy"
+  },
+  "dependencies": {
+    "@prisma/adapter-pg": "^7.10.0",
+    "@prisma/client": "^7.10.0",
+    "cors": "^2.8.5",
+    "dotenv": "^18.0.4",
+    "express": "^5.1.0",
+    "pg": "^8.23.0",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "prisma": "^7.10.0"
+  }
+}

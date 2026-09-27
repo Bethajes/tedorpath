@@ -1,0 +1,53 @@
+// Prisma schema for Tedor Tutors.
+//
+// Step 3 scope: only the public tutor-request form and its persistence.
+// No admin, tutor, client, matching, payment or scheduling models yet.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+/// Lifecycle of a submitted request. Managed manually by the team for now;
+/// there is no admin UI yet.
+enum TutorRequestStatus {
+  NEW
+  CONTACTED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+model TutorRequest {
+  id String @id @default(uuid()) @db.Uuid
+
+  // Contact details
+  fullName         String
+  phone            String
+  telegramUsername String?
+  email            String?
+
+  // What the client needs
+  subject         String
+  educationLevel  String
+  description     String
+  learningMode    String
+  location        String?
+  preferredDays   String?
+  preferredTime   String?
+  budget          String?
+  additionalInfo  String?
+
+  status     TutorRequestStatus @default(NEW)
+  adminNotes String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status])
+  @@index([createdAt])
+  @@map("tutor_requests")
+}
