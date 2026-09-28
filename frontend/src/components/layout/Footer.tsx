@@ -1,44 +1,88 @@
 import { Link } from 'react-router-dom'
 
-const FOOTER_LINKS = [
-  { to: '/request-tutor', label: 'Find a Tutor' },
-  { to: '/about', label: 'About' },
-  { to: '/contact', label: 'Contact' },
+import { Logo } from '@/components/brand/Logo'
+import { Container } from '@/components/layout/PageShell'
+
+interface FooterColumn {
+  title: string
+  links: { to: string; label: string }[]
+}
+
+/**
+ * Every link below points at a route that exists. There is no tutor
+ * registration, help centre, social profile or contact detail in the product
+ * yet, so none are listed rather than linking to something that 404s.
+ */
+const COLUMNS: FooterColumn[] = [
+  {
+    title: 'Product',
+    links: [
+      { to: '/request-tutor', label: 'Find a Tutor' },
+      { to: '/#how-it-works', label: 'How It Works' },
+      { to: '/about#become-a-tutor', label: 'Become a Tutor' },
+    ],
+  },
+  {
+    title: 'Company',
+    links: [
+      { to: '/about', label: 'About' },
+      { to: '/contact', label: 'Contact' },
+    ],
+  },
+  {
+    title: 'Support',
+    links: [
+      { to: '/request-tutor', label: 'Request a Tutor' },
+      { to: '/#subjects', label: 'Subjects' },
+    ],
+  },
 ]
 
 export function Footer() {
   return (
-    <footer className="border-t border-slate-200 bg-slate-50">
-      <div className="mx-auto flex max-w-6xl flex-col gap-6 px-4 py-10 sm:px-6 md:flex-row md:items-start md:justify-between">
-        <div className="max-w-sm">
-          <p className="text-base font-bold text-slate-900">Tedor Tutors</p>
-          <p className="mt-2 text-sm text-slate-600">
-            We connect students with tutors for personalized learning, online or in person.
-          </p>
-        </div>
+    <footer className="border-t border-ink-200 bg-ink-50">
+      <Container className="py-14 sm:py-16">
+        <div className="grid gap-10 lg:grid-cols-[1.4fr_2fr] lg:gap-16">
+          <div className="max-w-sm">
+            <Link to="/" className="inline-flex rounded-md">
+              <Logo size="md" />
+            </Link>
+            <p className="mt-4 leading-relaxed text-ink-600">
+              Learn better. Find the right tutor. Tell us what you want to learn and our team
+              will help you find someone who fits.
+            </p>
+          </div>
 
-        <nav aria-label="Footer">
-          <ul className="flex flex-col gap-2 text-sm">
-            {FOOTER_LINKS.map((link) => (
-              <li key={link.to}>
-                <Link
-                  to={link.to}
-                  className="text-slate-600 transition-colors hover:text-brand-700"
-                >
-                  {link.label}
-                </Link>
-              </li>
+          <div className="grid grid-cols-2 gap-8 sm:grid-cols-3">
+            {COLUMNS.map((column) => (
+              <nav key={column.title} aria-label={column.title}>
+                <h2 className="text-sm font-semibold uppercase tracking-[0.1em] text-ink-900">
+                  {column.title}
+                </h2>
+                <ul className="mt-4 flex flex-col gap-3">
+                  {column.links.map((link) => (
+                    <li key={`${column.title}-${link.to}-${link.label}`}>
+                      <Link
+                        to={link.to}
+                        className="text-ink-600 transition-colors hover:text-brand-700"
+                      >
+                        {link.label}
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              </nav>
             ))}
-          </ul>
-        </nav>
-      </div>
+          </div>
+        </div>
+      </Container>
 
-      <div className="border-t border-slate-200">
-        <div className="mx-auto max-w-6xl px-4 py-4 sm:px-6">
-          <p className="text-xs text-slate-500">
+      <div className="border-t border-ink-200">
+        <Container className="py-6">
+          <p className="text-sm text-ink-500">
             &copy; {new Date().getFullYear()} Tedor Tutors. All rights reserved.
           </p>
-        </div>
+        </Container>
       </div>
     </footer>
   )

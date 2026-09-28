@@ -28,15 +28,36 @@ interface ApiEnvelope {
   error?: { code?: string; message?: string }
 }
 
-/** POST a JSON body to an API path and return the `data` payload. */
-export async function postJson<T>(path: string, body: unknown): Promise<T> {
-  let response: Response
+/**
+ * Supplies the admin access token, if the operator has entered one.
+ *
+ * The token is NOT baked into the bundle: it is never read from a `VITE_*`
+ * variable, because everything prefixed `VITE_` is inlined into the browser
+ * build. The admin session registers a provider here at runtime.
+ */
+type TokenProvider = () => string | null
 
+let tokenProvider: TokenProvider = () => null
+
+export function setAuthTokenProvider(provider: TokenProvider): void {
+  tokenProvider = provider
+}
+
+type Method = 'GET' | 'POST' | 'PATCH' | 'DELETE'
+
+async function requestJson<T>(method: Method, path: string, body?: unknown): Promise<T> {
+  const headers: Record<string, string> = {}
+  if (body !== undefined) headers['Content-Type'] = 'application/json'
+
+  const token = tokenProvider()
+  if (token) headers.Authorization = `Bearer ${token}`
+
+  let response: Response
   try {
     response = await fetch(`${API_BASE_URL}${path}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
+      method,
+      headers,
+      ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
     })
   } catch {
     // Network failure, CORS rejection or the API being down.
@@ -59,4 +80,21 @@ export async function postJson<T>(path: string, body: unknown): Promise<T> {
   }
 
   return envelope.data as T
+}
+
+/** POST a JSON body to an API path and return the `data` payload. */
+export function postJson<T>(path: string, body: unknown): Promise<T> {
+  return requestJson<T>('POST', path, body)
+}
+
+export function getJson<T>(path: string): Promise<T> {
+  return requestJson<T>('GET', path)
+}
+
+export function patchJson<T>(path: string, body: unknown): Promise<T> {
+  return requestJson<T>('PATCH', path, body)
+}
+
+export function deleteJson<T>(path: string): Promise<T> {
+  return requestJson<T>('DELETE', path)
 }

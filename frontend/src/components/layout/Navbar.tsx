@@ -1,79 +1,115 @@
-import { useState } from 'react'
-import { Link, NavLink } from 'react-router-dom'
+import { useEffect, useState } from 'react'
+import { Link, useLocation } from 'react-router-dom'
 
+import { Logo } from '@/components/brand/Logo'
 import { cn } from '@/lib/cn'
 
-const NAV_LINKS = [
-  { to: '/', label: 'Home', end: true },
-  { to: '/request-tutor', label: 'Find a Tutor', end: false },
-  { to: '/about', label: 'About', end: false },
-  { to: '/contact', label: 'Contact', end: false },
+interface NavItem {
+  to: string
+  label: string
+  /** Anchor targets live on another page; they should not render as "current". */
+  anchor?: boolean
+}
+
+const NAV_ITEMS: NavItem[] = [
+  { to: '/request-tutor', label: 'Find a Tutor' },
+  { to: '/about#become-a-tutor', label: 'Become a Tutor', anchor: true },
+  { to: '/#how-it-works', label: 'How It Works', anchor: true },
+  { to: '/about', label: 'About' },
 ]
 
 export function Navbar() {
   const [open, setOpen] = useState(false)
+  const location = useLocation()
+  const panelId = 'primary-navigation'
+
+  // Escape closes the panel and returns focus to the toggle.
+  useEffect(() => {
+    if (!open) return
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key === 'Escape') {
+        setOpen(false)
+        document.getElementById('primary-navigation-toggle')?.focus()
+      }
+    }
+    document.addEventListener('keydown', onKeyDown)
+    return () => document.removeEventListener('keydown', onKeyDown)
+  }, [open])
+
+  function closeMenu() {
+    setOpen(false)
+  }
+
+  function isCurrent(item: NavItem) {
+    if (item.anchor) return false
+    return location.pathname === item.to
+  }
 
   return (
-    <header className="sticky top-0 z-40 border-b border-slate-200 bg-white/95 backdrop-blur">
-      <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-3 sm:px-6">
-        <Link to="/" className="text-lg font-bold tracking-tight text-slate-900">
-          Tedor Tutors
+    <header className="sticky top-0 z-40 border-b border-ink-200/80 bg-white/90 backdrop-blur-md">
+      <div className="mx-auto flex h-16 w-full max-w-7xl items-center justify-between gap-6 px-5 sm:h-18 sm:px-8 lg:px-10">
+        <Link
+          to="/"
+          className="rounded-md"
+          aria-label="Tedor Tutors — home"
+        >
+          <Logo size="sm" />
         </Link>
 
-        <nav aria-label="Main" className="hidden items-center gap-1 md:flex">
-          {NAV_LINKS.map((link) => (
-            <NavLink
-              key={link.to}
-              to={link.to}
-              end={link.end}
-              className={({ isActive }) =>
-                cn(
-                  'rounded-md px-3 py-2 text-sm font-medium transition-colors',
-                  isActive
-                    ? 'bg-brand-50 text-brand-700'
-                    : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900',
-                )
-              }
+        <nav aria-label="Main" className="hidden items-center gap-1 lg:flex">
+          {NAV_ITEMS.map((item) => (
+            <Link
+              key={item.to}
+              to={item.to}
+              aria-current={isCurrent(item) ? 'page' : undefined}
+              className={cn(
+                'rounded-md px-3.5 py-2 text-[0.95rem] font-medium transition-colors',
+                isCurrent(item)
+                  ? 'text-brand-700'
+                  : 'text-ink-600 hover:bg-ink-50 hover:text-ink-900',
+              )}
             >
-              {link.label}
-            </NavLink>
+              {item.label}
+            </Link>
           ))}
+
           <Link
             to="/request-tutor"
-            className="ml-2 rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white shadow-sm transition-colors hover:bg-brand-700"
+            className="ml-3 inline-flex items-center rounded-lg bg-brand-600 px-5 py-2.5 text-[0.95rem] font-medium text-white shadow-sm transition-colors hover:bg-brand-700"
           >
             Find a Tutor
           </Link>
         </nav>
 
         <button
+          id="primary-navigation-toggle"
           type="button"
           aria-expanded={open}
-          aria-controls="mobile-nav"
+          aria-controls={panelId}
           onClick={() => setOpen((value) => !value)}
-          className="inline-flex items-center justify-center rounded-md border border-slate-300 p-2 text-slate-700 md:hidden"
+          className="inline-flex items-center justify-center rounded-lg border border-ink-200 p-2.5 text-ink-700 transition-colors hover:bg-ink-50 lg:hidden"
         >
-          <span className="sr-only">Toggle navigation menu</span>
+          <span className="sr-only">{open ? 'Close menu' : 'Open menu'}</span>
           <svg
             aria-hidden="true"
-            width="20"
-            height="20"
-            viewBox="0 0 20 20"
+            width="22"
+            height="22"
+            viewBox="0 0 22 22"
             fill="none"
             stroke="currentColor"
-            strokeWidth="1.8"
+            strokeWidth="1.9"
             strokeLinecap="round"
           >
             {open ? (
               <>
-                <path d="M5 5l10 10" />
-                <path d="M15 5L5 15" />
+                <path d="M5 5l12 12" />
+                <path d="M17 5L5 17" />
               </>
             ) : (
               <>
-                <path d="M3 6h14" />
-                <path d="M3 10h14" />
-                <path d="M3 14h14" />
+                <path d="M3 6h16" />
+                <path d="M3 11h16" />
+                <path d="M3 16h16" />
               </>
             )}
           </svg>
@@ -82,37 +118,43 @@ export function Navbar() {
 
       {open ? (
         <nav
-          id="mobile-nav"
+          id={panelId}
           aria-label="Mobile"
-          className="border-t border-slate-200 bg-white px-4 py-3 md:hidden"
+          className="border-t border-ink-200 bg-white lg:hidden"
         >
-          <ul className="flex flex-col gap-1">
-            {NAV_LINKS.map((link) => (
-              <li key={link.to}>
-                <NavLink
-                  to={link.to}
-                  end={link.end}
-                  onClick={() => setOpen(false)}
-                  className={({ isActive }) =>
-                    cn(
-                      'block rounded-md px-3 py-2 text-sm font-medium',
-                      isActive
-                        ? 'bg-brand-50 text-brand-700'
-                        : 'text-slate-700 hover:bg-slate-100',
-                    )
-                  }
+          <ul className="mx-auto flex w-full max-w-7xl flex-col gap-1 px-5 py-4 sm:px-8">
+            {NAV_ITEMS.map((item) => (
+              <li key={item.to}>
+                <Link
+                  to={item.to}
+                  onClick={closeMenu}
+                  className={cn(
+                    'block rounded-lg px-3 py-3 text-base font-medium transition-colors',
+                    isCurrent(item)
+                      ? 'bg-brand-50 text-brand-700'
+                      : 'text-ink-700 hover:bg-ink-50',
+                  )}
                 >
-                  {link.label}
-                </NavLink>
+                  {item.label}
+                </Link>
               </li>
             ))}
-            <li className="pt-1">
+            <li className="mt-2 border-t border-ink-200 pt-4">
               <Link
                 to="/request-tutor"
-                onClick={() => setOpen(false)}
-                className="block rounded-lg bg-brand-600 px-3 py-2.5 text-center text-sm font-medium text-white"
+                onClick={closeMenu}
+                className="block rounded-lg bg-brand-600 px-4 py-3.5 text-center text-base font-medium text-white transition-colors hover:bg-brand-700"
               >
                 Find a Tutor
+              </Link>
+            </li>
+            <li>
+              <Link
+                to="/contact"
+                onClick={closeMenu}
+                className="block rounded-lg px-3 py-3 text-center text-sm font-medium text-ink-500 transition-colors hover:bg-ink-50 hover:text-ink-800"
+              >
+                Contact us
               </Link>
             </li>
           </ul>

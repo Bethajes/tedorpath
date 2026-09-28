@@ -1,14 +1,16 @@
+import { Link } from 'react-router-dom'
+
 import { Container, PageShell } from '@/components/layout/PageShell'
 
 export function AboutPage() {
   return (
     <PageShell>
-      <Container className="max-w-2xl">
-        <h1 className="text-3xl font-bold tracking-tight text-slate-900 sm:text-4xl">
+      <Container className="max-w-3xl">
+        <h1 className="text-3xl font-bold tracking-[-0.02em] text-ink-900 sm:text-4xl">
           About Tedor Tutors
         </h1>
 
-        <div className="mt-6 flex flex-col gap-4 text-slate-600">
+        <div className="mt-6 flex flex-col gap-4 text-lg leading-relaxed text-ink-600">
           <p>
             Tedor Tutors connects students with tutors for personalized learning, online or in
             person.
@@ -23,17 +25,44 @@ export function AboutPage() {
           </p>
         </div>
 
-        <div className="mt-8 rounded-lg border border-slate-200 bg-slate-50 p-5">
-          <h2 className="text-lg font-semibold text-slate-900">Ready to get started?</h2>
-          <p className="mt-1 text-sm text-slate-600">
+        <section
+          id="become-a-tutor"
+          aria-labelledby="become-a-tutor-heading"
+          className="mt-12 scroll-mt-28 rounded-2xl border border-ink-200 bg-ink-50 p-6 sm:p-8"
+        >
+          <p className="text-sm font-semibold uppercase tracking-[0.12em] text-accent-700">
+            For tutors
+          </p>
+          <h2
+            id="become-a-tutor-heading"
+            className="mt-3 text-2xl font-bold tracking-[-0.02em] text-ink-900"
+          >
+            Become a tutor
+          </h2>
+          <p className="mt-3 leading-relaxed text-ink-600">
+            We are still building the Tedor tutor network and tutor registration is not open
+            yet. If you teach a subject covered on the site and would like to be considered when
+            it opens, get in touch and tell us what you teach.
+          </p>
+          <Link
+            to="/contact"
+            className="mt-6 inline-flex items-center justify-center rounded-lg bg-brand-600 px-5 py-3 text-[0.95rem] font-medium text-white transition-colors hover:bg-brand-700"
+          >
+            Get in touch
+          </Link>
+        </section>
+
+        <div className="mt-12 rounded-2xl border border-brand-200 bg-brand-50/60 p-6 sm:p-8">
+          <h2 className="text-lg font-semibold text-ink-900">Ready to get started?</h2>
+          <p className="mt-1.5 leading-relaxed text-ink-600">
             Send us a request and our team will take it from there.
           </p>
-          <a
-            href="/request-tutor"
-            className="mt-4 inline-flex items-center justify-center rounded-lg bg-brand-600 px-5 py-2.5 text-sm font-medium text-white transition-colors hover:bg-brand-700"
+          <Link
+            to="/request-tutor"
+            className="mt-6 inline-flex items-center justify-center rounded-lg bg-brand-600 px-5 py-3 text-[0.95rem] font-medium text-white transition-colors hover:bg-brand-700"
           >
             Find a Tutor
-          </a>
+          </Link>
         </div>
       </Container>
     </PageShell>

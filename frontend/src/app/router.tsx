@@ -1,15 +1,52 @@
+import { Suspense, type ReactNode } from 'react'
 import { createBrowserRouter } from 'react-router-dom'
 
-import { AboutPage } from '@/pages/AboutPage'
-import { ContactPage } from '@/pages/ContactPage'
-import { HomePage } from '@/pages/HomePage'
-import { NotFoundPage } from '@/pages/NotFoundPage'
-import { RequestTutorPage } from '@/pages/RequestTutorPage'
+import {
+  AdminDashboardPage,
+  AdminFallback,
+  AdminLoginPage,
+  AdminRequestDetailPage,
+  AdminRequestsPage,
+} from '@/app/adminPages'
+import { RequireAdminToken } from '@/app/RequireAdminToken'
+import {
+  AboutPage,
+  ContactPage,
+  HomePage,
+  NotFoundPage,
+  PageFallback,
+  RequestTutorPage,
+} from '@/app/publicPages'
+
+const admin = (element: ReactNode) => (
+  <RequireAdminToken>
+    <Suspense fallback={<AdminFallback />}>{element}</Suspense>
+  </RequireAdminToken>
+)
+
+// Public pages are code-split (see `publicPages`), so the router renders
+// `PageFallback` while a chunk loads.
 
 export const router = createBrowserRouter([
-  { path: '/', element: <HomePage /> },
+  { path: '/', element: <HomePage />, hydrateFallbackElement: <PageFallback /> },
   { path: '/request-tutor', element: <RequestTutorPage /> },
   { path: '/about', element: <AboutPage /> },
   { path: '/contact', element: <ContactPage /> },
+
+  // Admin area. Not part of the public site: gated by RequireAdminToken, and
+  // every /api/admin call is additionally rejected by the backend without a
+  // valid admin token. See backend/src/middleware/adminAuth.js.
+  {
+    path: '/admin/login',
+    element: (
+      <Suspense fallback={<AdminFallback />}>
+        <AdminLoginPage />
+      </Suspense>
+    ),
+  },
+  { path: '/admin', element: admin(<AdminDashboardPage />) },
+  { path: '/admin/requests', element: admin(<AdminRequestsPage />) },
+  { path: '/admin/requests/:id', element: admin(<AdminRequestDetailPage />) },
+
   { path: '*', element: <NotFoundPage /> },
 ])

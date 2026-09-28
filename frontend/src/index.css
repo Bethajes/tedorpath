@@ -1,31 +1,115 @@
 @import 'tailwindcss';
 
+/**
+ * Tedor Tutors design tokens.
+ *
+ * The `brand` ramp is the Tedor blue taken from the logo mark; `accent` is the
+ * Tedor orange from the upward arrow. Blue is the primary action/brand colour
+ * and orange is used sparingly for highlights, small details and secondary
+ * calls to action, so the site never reads as overwhelmingly blue.
+ *
+ * The previous indigo `brand` ramp is gone — every consumer of `brand-*`
+ * (buttons, form controls, admin UI) now resolves to the Tedor blue, which is
+ * why no component had to be touched to inherit the new identity.
+ */
 @theme {
-  --color-brand-50: #eef4ff;
-  --color-brand-100: #dbe6fe;
-  --color-brand-200: #bfd3fe;
-  --color-brand-300: #93b4fd;
-  --color-brand-400: #608cfa;
-  --color-brand-500: #3b66f6;
-  --color-brand-600: #2547eb;
-  --color-brand-700: #1d35d8;
-  --color-brand-800: #1e2daf;
-  --color-brand-900: #1e2c8a;
+  --color-brand-50: #eff8fe;
+  --color-brand-100: #dcf0fd;
+  --color-brand-200: #bce1fb;
+  --color-brand-300: #8acdf7;
+  --color-brand-400: #52b0f0;
+  --color-brand-500: #1e96e8;
+  --color-brand-600: #0f78c4;
+  --color-brand-700: #0b5f9f;
+  --color-brand-800: #0d4f80;
+  --color-brand-900: #104269;
+
+  --color-accent-50: #fff6ed;
+  --color-accent-100: #ffe8d1;
+  --color-accent-200: #ffcaa0;
+  --color-accent-300: #ffa564;
+  --color-accent-400: #fc8a34;
+  --color-accent-500: #f5801f;
+  --color-accent-600: #dd6708;
+  --color-accent-700: #b44d09;
+  --color-accent-800: #933e10;
+  --color-accent-900: #793512;
+
+  /* Dark navy/charcoal used for headings and body copy. */
+  --color-ink-50: #f6f8fa;
+  --color-ink-100: #eceff3;
+  --color-ink-200: #d9dfe6;
+  --color-ink-300: #b0bac7;
+  --color-ink-400: #7d8b9c;
+  --color-ink-500: #5b6879;
+  --color-ink-600: #46525f;
+  --color-ink-700: #333d49;
+  --color-ink-800: #1f2733;
+  --color-ink-900: #121a24;
+
+  --font-sans:
+    ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue',
+    Arial, sans-serif;
+
+  /* Content width: 1280px at the widest breakpoint (see Container). */
+  --container-6xl: 72rem;
+
+  /* Deliberate vertical rhythm between page sections. Applied per side, so two
+     adjacent sections end up 96–160px apart on desktop. */
+  --spacing-section: 4rem;
+  --spacing-section-lg: 5rem;
 }
 
 @layer base {
   html {
     scroll-behavior: smooth;
+    /* Sticky header offset for in-page anchor targets such as #how-it-works. */
+    scroll-padding-top: 5.5rem;
   }
 
   body {
-    @apply bg-white text-slate-800 antialiased;
-    font-family:
-      ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue',
-      Arial, sans-serif;
+    @apply bg-white text-ink-700 antialiased;
+    font-family: var(--font-sans);
+    /* Slightly looser than Tailwind's default for long-form reading. */
+    line-height: 1.65;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4 {
+    @apply text-ink-900;
+    text-wrap: balance;
+    line-height: 1.15;
+    letter-spacing: -0.018em;
+  }
+
+  p {
+    text-wrap: pretty;
   }
 
   :focus-visible {
     @apply outline-2 outline-offset-2 outline-brand-600;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    html {
+      scroll-behavior: auto;
+    }
+
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+}
+
+@layer components {
+  /* Standard vertical rhythm for a full-width homepage section. */
+  .section-y {
+    @apply py-12 sm:py-[var(--spacing-section)] lg:py-[var(--spacing-section-lg)];
   }
 }

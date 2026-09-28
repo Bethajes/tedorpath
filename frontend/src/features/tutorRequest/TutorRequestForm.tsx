@@ -1,4 +1,4 @@
-import { useRef, useState, type HTMLInputTypeAttribute } from 'react'
+import { useEffect, useRef, useState, type HTMLInputTypeAttribute } from 'react'
 import {
   useForm,
   type FieldErrors,
@@ -6,10 +6,12 @@ import {
   type UseFormReturn,
 } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
+import { useSearchParams } from 'react-router-dom'
 
 import { FormSection, FullWidth } from '@/components/form/FormSection'
 import { Alert, Button, Field, Input, Select, Textarea } from '@/components/ui'
 import { ApiError } from '@/lib/api'
+import { parseTutorRequestPrefill } from '@/lib/tutorRequestQuery'
 
 import { submitTutorRequest } from './tutorRequest.api'
 import {
@@ -154,12 +156,35 @@ function TextAreaField({
 export function TutorRequestForm() {
   const [submitted, setSubmitted] = useState(false)
   const [submitError, setSubmitError] = useState<string | null>(null)
+  const [searchParams] = useSearchParams()
+
+  /**
+   * Preferences carried over from the homepage discovery panel and the subject
+   * cards. Parsed against the same enums the schema enforces, so a hand-edited
+   * URL cannot seed the form with a value it could not otherwise hold.
+   */
+  const { subject, educationLevel, learningMode } = parseTutorRequestPrefill(
+    searchParams.toString(),
+  )
 
   const form = useForm<TutorRequestValues, unknown, TutorRequestPayload>({
     resolver: zodResolver(tutorRequestSchema),
     mode: 'onBlur',
-    defaultValues: DEFAULT_VALUES,
+    defaultValues: {
+      ...DEFAULT_VALUES,
+      subject,
+      educationLevel,
+      learningMode,
+    },
   })
+
+  // Keep the dropdowns in step when the query string changes under us, e.g. the
+  // visitor edits the URL or navigates back and forward.
+  useEffect(() => {
+    if (subject) form.setValue('subject', subject)
+    if (educationLevel) form.setValue('educationLevel', educationLevel)
+    if (learningMode) form.setValue('learningMode', learningMode)
+  }, [form, subject, educationLevel, learningMode])
 
   const {
     handleSubmit,
@@ -335,7 +360,7 @@ export function TutorRequestForm() {
       </FormSection>
 
       <div className="flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <p className="text-sm text-slate-500">
+        <p className="text-sm text-ink-500">
           Fields marked with <span className="text-red-600">*</span> are required.
         </p>
         <Button type="submit" size="lg" disabled={isSubmitting} className="w-full sm:w-auto">

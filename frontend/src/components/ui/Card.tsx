@@ -8,7 +8,7 @@ export function Card({ className, ...props }: CardProps) {
   return (
     <div
       className={cn(
-        'rounded-xl border border-slate-200 bg-white shadow-sm',
+        'rounded-xl border border-ink-200 bg-white shadow-[0_1px_3px_rgba(18,26,36,0.05)]',
         className,
       )}
       {...props}
@@ -17,11 +17,11 @@ export function Card({ className, ...props }: CardProps) {
 }
 
 export function CardHeader({ className, ...props }: HTMLAttributes<HTMLDivElement>) {
-  return <div className={cn('border-b border-slate-100 px-5 py-4', className)} {...props} />
+  return <div className={cn('border-b border-ink-100 px-5 py-4', className)} {...props} />
 }
 
 export function CardTitle({ className, ...props }: HTMLAttributes<HTMLHeadingElement>) {
-  return <h2 className={cn('text-lg font-semibold text-slate-900', className)} {...props} />
+  return <h2 className={cn('text-lg font-semibold text-ink-900', className)} {...props} />
 }
 
 export function CardBody({ className, ...props }: HTMLAttributes<HTMLDivElement>) {

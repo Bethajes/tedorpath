@@ -41,4 +41,30 @@ export const env = {
       .map((origin) => origin.trim())
       .filter(Boolean)
   },
+  /**
+   * Shared secret for the admin API.
+   *
+   * This is a development stand-in for real authentication, NOT a login
+   * system: it is a single static token with no users, roles, sessions or
+   * expiry. It exists so the admin endpoints are not publicly readable while
+   * proper authentication is still to be built.
+   *
+   * It must only ever live in the backend environment. Anything prefixed
+   * `VITE_` is inlined into the browser bundle and is therefore public.
+   */
+  get adminApiToken() {
+    return process.env.ADMIN_API_TOKEN ?? ''
+  },
+  /**
+   * Refuses to serve admin routes unless a token is configured when running in
+   * production, so a misconfigured deploy fails loudly instead of exposing
+   * client personal data.
+   */
+  assertAdminConfigured() {
+    if (this.isProduction && !this.adminApiToken) {
+      throw new Error(
+        'ADMIN_API_TOKEN must be set to run in production. The admin API is disabled without it.',
+      )
+    }
+  },
 }

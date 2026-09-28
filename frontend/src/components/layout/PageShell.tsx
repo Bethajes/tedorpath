@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react'
 
+import { ScrollToHash } from '@/app/ScrollToHash'
 import { cn } from '@/lib/cn'
 
 import { Footer } from './Footer'
@@ -16,6 +17,7 @@ export interface PageShellProps {
 export function PageShell({ children, bare = false, className }: PageShellProps) {
   return (
     <div className="flex min-h-screen flex-col bg-white">
+      <ScrollToHash />
       <Navbar />
       <main id="main-content" className={cn('flex-1', !bare && 'py-10 sm:py-14', className)}>
         {children}
@@ -25,7 +27,17 @@ export function PageShell({ children, bare = false, className }: PageShellProps)
   )
 }
 
-/** Consistent max width + horizontal padding for page content. */
+/**
+ * Consistent max width + horizontal padding for page content.
+ *
+ * 1280px at the widest breakpoint, centred, with gutters that grow on larger
+ * screens. Narrower reading pages (about, contact, the request form) pass a
+ * `max-w-*` class to opt out of the full width.
+ */
 export function Container({ children, className }: { children: ReactNode; className?: string }) {
-  return <div className={cn('mx-auto w-full max-w-6xl px-4 sm:px-6', className)}>{children}</div>
+  return (
+    <div className={cn('mx-auto w-full max-w-7xl px-5 sm:px-8 lg:px-10', className)}>
+      {children}
+    </div>
+  )
 }

@@ -2,6 +2,7 @@ import cors from 'cors'
 import express from 'express'
 
 import { env } from './config/env.js'
+import { adminRequestsRouter } from './modules/adminRequests/index.js'
 import { tutorRequestsRouter } from './modules/tutorRequests/index.js'
 import { healthRouter } from './routes/health.js'
 
@@ -31,6 +32,10 @@ export function createApp() {
 
   app.use('/api/health', healthRouter)
   app.use('/api/tutor-requests', tutorRequestsRouter)
+  // Admin surface. Not public: guarded by requireAdmin (see
+  // src/middleware/adminAuth.js) and disabled in production unless
+  // ADMIN_API_TOKEN is configured.
+  app.use('/api/admin', adminRequestsRouter)
 
   // Malformed JSON bodies are handled here so they do not surface as a 500.
   app.use((error, _req, res, _next) => {

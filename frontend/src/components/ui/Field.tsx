@@ -31,11 +31,11 @@ export function Field({ id, label, required = false, hint, error, children }: Fi
 
   return (
     <div className="flex flex-col gap-1.5">
-      <label htmlFor={id} className="text-sm font-medium text-slate-800">
+      <label htmlFor={id} className="text-sm font-medium text-ink-800">
         {label}
         {required ? <RequiredMark /> : null}
         {!required ? (
-          <span className="ml-2 text-xs font-normal text-slate-500">Optional</span>
+          <span className="ml-2 text-xs font-normal text-ink-500">Optional</span>
         ) : null}
       </label>
 
@@ -46,7 +46,7 @@ export function Field({ id, label, required = false, hint, error, children }: Fi
       })}
 
       {hint ? (
-        <p id={hintId} className="text-xs text-slate-500">
+        <p id={hintId} className="text-xs text-ink-500">
           {hint}
         </p>
       ) : null}

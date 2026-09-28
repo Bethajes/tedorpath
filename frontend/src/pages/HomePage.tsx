@@ -1,3 +1,4 @@
+import { BrandStory } from '@/components/home/BrandStory'
 import { CTASection } from '@/components/home/CTASection'
 import { Hero } from '@/components/home/Hero'
 import { HowItWorks } from '@/components/home/HowItWorks'
@@ -12,6 +13,7 @@ export function HomePage() {
       <SubjectGrid />
       <HowItWorks />
       <WhyTedor />
+      <BrandStory />
       <CTASection />
     </PageShell>
   )
