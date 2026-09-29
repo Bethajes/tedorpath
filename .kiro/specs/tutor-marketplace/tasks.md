@@ -78,7 +78,7 @@
 
 - [x] 5. Checkpoint — ensure all tests pass, ask the user if questions arise.
 
-- [ ] 6. Authenticated tutor profile management API
+- [x] 6. Authenticated tutor profile management API
   - Create `backend/src/modules/tutorProfile/validation.js` — Zod schemas for create and patch payloads
   - Create `backend/src/modules/tutorProfile/service.js`:
     - `createTutorProfile(userId, data)` — creates with `profileStatus: DRAFT`, returns 409 if profile already exists for userId
@@ -90,27 +90,27 @@
   - Mount in `backend/src/app.js` as `app.use('/api/tutor-profile', tutorProfileRouter)`
   - _Requirements: 6.1, 6.2, 6.3, 6.4, 6.5, 6.6, 6.7_
 
-- [ ] 6.1 Write property test: new profile defaults to DRAFT (Property 6)
+- [x] 6.1 Write property test: new profile defaults to DRAFT (Property 6)
   - Create `backend/tests/tutorProfile.property.test.mjs`
   - **Feature: tutor-marketplace, Property 6: New profile always defaults to DRAFT**
   - **Validates: Requirements 2.3, 2.4, 6.1**
 
-- [ ] 6.2 Write property test: partial update correctness (Property 7)
+- [x] 6.2 Write property test: partial update correctness (Property 7)
   - Add to `backend/tests/tutorProfile.property.test.mjs`
   - **Feature: tutor-marketplace, Property 7: Partial update touches only specified fields**
   - **Validates: Requirements 6.3**
 
-- [ ] 6.3 Write property test: ownership enforcement (Property 8)
+- [x] 6.3 Write property test: ownership enforcement (Property 8)
   - Add to `backend/tests/tutorProfile.property.test.mjs`
   - **Feature: tutor-marketplace, Property 8: Profile ownership is enforced server-side**
   - **Validates: Requirements 6.4, 16.2, 16.3**
 
-- [ ] 6.4 Write unit tests for tutor profile management API
+- [x] 6.4 Write unit tests for tutor profile management API
   - Create `backend/tests/tutorProfile.api.test.mjs`
   - Cover: create requires auth, duplicate create returns 409, patch updates only specified fields, patch by non-owner returns 403, /me returns correct profile, submit with complete profile succeeds, submit with missing fields returns 422
   - _Requirements: 6.1–6.7_
 
-- [ ] 7. Admin tutor moderation API
+- [x] 7. Admin tutor moderation API
   - Create `backend/src/modules/adminTutors/service.js`:
     - `listTutorProfiles({ page, limit, status })` — returns all profiles with pagination
     - `getTutorProfileAdmin(id)` — returns full profile including moderation fields
@@ -120,59 +120,59 @@
   - Mount in `backend/src/app.js` inside the existing `/api/admin` prefix
   - _Requirements: 7.1, 7.2, 7.3, 7.4, 7.5_
 
-- [ ] 7.1 Write unit tests for admin tutor moderation API
+- [x] 7.1 Write unit tests for admin tutor moderation API
   - Create `backend/tests/adminTutors.api.test.mjs`
   - Cover: list requires admin token, detail requires admin token, valid status change applied, invalid status rejected with 422, APPROVED does not automatically set verificationStatus to VERIFIED unless payload says so
   - _Requirements: 7.1–7.5_
 
-- [ ] 8. TutorRequest backward compatibility — tutorProfileId extension
+- [x] 8. TutorRequest backward compatibility — tutorProfileId extension
   - Update `backend/src/modules/tutorRequests/validation.js` to accept optional `tutorProfileId` (UUID string or null)
   - Update `backend/src/modules/tutorRequests/service.js` `createTutorRequest` to accept and persist `tutorProfileId`; if provided, verify the referenced TutorProfile exists (any status is fine — the client already chose them); return 400 if not found
   - _Requirements: 3.1, 3.2, 3.3, 3.4_
 
-- [ ] 8.1 Write property test: subject round-trip (Property 12)
+- [x] 8.1 Write property test: subject round-trip (Property 12)
   - Add to `backend/tests/tutors.property.test.mjs`
   - **Feature: tutor-marketplace, Property 12: Subject-to-profile many-to-many relationship round-trips**
   - **Validates: Requirements 1.5, 2.5**
 
-- [ ] 8.2 Write unit tests for TutorRequest tutorProfileId integration
+- [x] 8.2 Write unit tests for TutorRequest tutorProfileId integration
   - Add to `backend/tests/tutors.api.test.mjs` (or a new file)
   - Cover: general request (no tutorProfileId) still works, request with valid tutorProfileId links correctly, request with non-existent UUID returns 400
   - _Requirements: 3.2, 3.3, 3.4_
 
-- [ ] 9. Development seed data
+- [x] 9. Development seed data
   - Extend `backend/prisma/seed.js` to create 3 demo TutorProfiles (displayName: "Demo Tutor 1/2/3") each with APPROVED status, linked subjects, levels, and teachingMode, guarded behind `NODE_ENV !== 'production'` check
   - Create 3 demo User rows for the seed profiles (email: `demo1@dev.local`, etc.) only if not already present
   - Log a warning and exit without creating records if `NODE_ENV=production`
   - _Requirements: 13.1, 13.2, 13.3, 13.4_
 
-- [ ] 10. Checkpoint — ensure all tests pass, ask the user if questions arise.
+- [x] 10. Checkpoint — ensure all tests pass, ask the user if questions arise.
 
-- [ ] 11. Frontend types and API client for tutors
+- [x] 11. Frontend types and API client for tutors
   - Create `frontend/src/features/tutors/tutors.types.ts` with `TutorCardDTO`, `TutorDetailDTO`, `TutorFilters`, `TutorListResponse`, `TutorSortOption` TypeScript types matching the API contracts in the design document
   - Create `frontend/src/features/tutors/tutors.api.ts` with `listTutors(filters, page, limit)` and `getTutor(id)` functions using the existing `api.ts` fetch wrapper
   - _Requirements: 4.8, 5.1, 8.1_
 
-- [ ] 12. TutorCard component
+- [x] 12. TutorCard component
   - Create `frontend/src/features/tutors/components/TutorCard.tsx`
   - Display: profile photo (with accessible `alt` and placeholder avatar when `profilePhotoUrl` is null), displayName, headline, up to 2 subject names, teachingMode badge, location (when present), hourlyRate (when present), "View Profile" button navigating to `/tutors/:id`
   - Apply Tedor design: white background, subtle border, shadow, 16–20 px border-radius, Tedor blue CTA
   - No fabricated metrics
   - _Requirements: 9.1, 9.2, 9.3, 9.4, 9.5_
 
-- [ ] 12.1 Write property test: TutorCard renders required fields (Property 9)
+- [x] 12.1 Write property test: TutorCard renders required fields (Property 9)
   - Install `fast-check` in the frontend (`npm install --save-dev fast-check`)
   - Create `frontend/src/features/tutors/components/TutorCard.test.tsx`
   - **Feature: tutor-marketplace, Property 9: TutorCard renders all required public fields**
   - **Validates: Requirements 9.1, 9.4**
 
-- [ ] 13. EmptyState component
+- [x] 13. EmptyState component
   - Create `frontend/src/features/tutors/components/EmptyState.tsx`
   - Display: heading "Find the right tutor", descriptive message, "Request a Tutor" CTA linking to `/request-tutor`
   - Accept optional `isFiltered` prop to vary message ("No tutors match these filters" vs. "No tutors available yet")
   - _Requirements: 8.2, 19_
 
-- [ ] 14. FilterPanel component
+- [x] 14. FilterPanel component
   - Create `frontend/src/features/tutors/components/FilterPanel.tsx`
   - Controls: Subject (select from active subjects), Level (select from EDUCATION_LEVELS), Teaching Mode (ONLINE/IN_PERSON/BOTH), Location (text), Hourly Rate range (min/max numeric inputs)
   - On desktop: renders as a sidebar
@@ -181,7 +181,7 @@
   - Full keyboard navigation and ARIA labels on all controls
   - _Requirements: 8.7, 8.8, 10.1–10.5_
 
-- [ ] 15. TutorDirectoryPage — `/tutors`
+- [x] 15. TutorDirectoryPage — `/tutors`
   - Create `frontend/src/features/tutors/TutorDirectoryPage.tsx`
   - Layout: page heading, search bar (`q` param), `FilterPanel` sidebar/drawer, sort dropdown, paginated grid of `TutorCard` components, `EmptyState` when items is empty
   - Reads URL search params on mount to initialize filter and search state (supports `/tutors?subject=mathematics` deep-linking from homepage)
@@ -190,12 +190,12 @@
   - Pagination controls update `page` param
   - _Requirements: 8.1, 8.2, 8.3, 8.4, 8.5, 8.6, 8.7, 8.8_
 
-- [ ] 15.1 Write unit tests for TutorDirectoryPage
+- [x] 15.1 Write unit tests for TutorDirectoryPage
   - Create `frontend/src/features/tutors/TutorDirectoryPage.test.tsx`
   - Cover: renders search bar and filter panel, shows TutorCards when API returns data, shows EmptyState when API returns empty items, loading indicator while fetching, filter changes update URL params, pagination controls work
   - _Requirements: 8.1–8.8_
 
-- [ ] 16. TutorProfilePage — `/tutors/:id`
+- [x] 16. TutorProfilePage — `/tutors/:id`
   - Create `frontend/src/features/tutorProfile/TutorProfilePage.tsx`
   - Layout: profile photo, displayName, headline, full bio, subjects list, student levels, teaching mode, location, hourly rate, education, experience, languages, availability, "Request This Tutor" button
   - "Request This Tutor" — if authenticated: navigate to `/request-tutor?tutorId=<id>`; if not authenticated: navigate to `/login` with state `{ from: '/request-tutor?tutorId=<id>' }` so `RequireAuth` / `LoginPage` redirect correctly after sign-in
@@ -204,20 +204,20 @@
   - Correct heading hierarchy, accessible image alt text
   - _Requirements: 10.1, 10.2, 10.3, 10.4, 10.5, 12.1, 12.2, 12.3_
 
-- [ ] 16.1 Write property test: profile page renders all required fields (Property 10)
+- [x] 16.1 Write property test: profile page renders all required fields (Property 10)
   - Create `frontend/src/features/tutorProfile/TutorProfilePage.test.tsx`
   - **Feature: tutor-marketplace, Property 10: Tutor profile page renders all public profile fields**
   - **Validates: Requirements 10.1, 10.3**
 
-- [ ] 17. Register `/tutors` and `/tutors/:id` routes
+- [x] 17. Register `/tutors` and `/tutors/:id` routes
   - Add `TutorDirectoryPage` and `TutorProfilePage` as lazy-loaded exports in `frontend/src/app/publicPages.tsx`
   - Add `{ path: '/tutors', element: <TutorDirectoryPage /> }` and `{ path: '/tutors/:id', element: <TutorProfilePage /> }` to `frontend/src/app/router.tsx`
   - Verify all existing routes still resolve correctly
   - _Requirements: 8.1, 10.1_
 
-- [ ] 18. Checkpoint — ensure all tests pass, ask the user if questions arise.
+- [x] 18. Checkpoint — ensure all tests pass, ask the user if questions arise.
 
-- [ ] 19. Tutor onboarding flow — `/become-a-tutor`
+- [x] 19. Tutor onboarding flow — `/become-a-tutor`
   - Create `frontend/src/features/tutorOnboarding/tutorOnboarding.types.ts` — step data types and wizard state
   - Create `frontend/src/features/tutorOnboarding/tutorOnboarding.api.ts` — wrappers for `POST /api/tutor-profile`, `PATCH /api/tutor-profile`, `GET /api/tutor-profile/me`, `POST /api/tutor-profile/submit`
   - Create `frontend/src/features/tutorOnboarding/steps/` directory with one component per step:
@@ -232,21 +232,21 @@
   - Create `frontend/src/features/tutorOnboarding/TutorOnboardingPage.tsx` — wizard shell that: checks auth (redirects to login with `?next=/become-a-tutor` if not signed in), loads existing DRAFT from `/api/tutor-profile/me` if present, steps through the 8 steps, auto-saves on step navigation via `PATCH /api/tutor-profile`, calls `POST /api/tutor-profile/submit` on final step, shows validation errors from API
   - _Requirements: 11.1, 11.2, 11.3, 11.4, 11.5_
 
-- [ ] 20. Register `/become-a-tutor` route
+- [x] 20. Register `/become-a-tutor` route
   - Add `TutorOnboardingPage` as a lazy export in `publicPages.tsx`
   - Add `{ path: '/become-a-tutor', element: <TutorOnboardingPage /> }` to `router.tsx`
   - _Requirements: 11.1_
 
-- [ ] 21. Homepage integration
+- [x] 21. Homepage integration
   - Update the "Find a Tutor" CTA button/link in `frontend/src/pages/HomePage.tsx` (or the relevant component) to navigate to `/tutors`
   - Update each subject card in `frontend/src/components/home/SubjectGrid.tsx` (or equivalent) to navigate to `/tutors?subject=<slug>` where the slug is derived from the subject name
   - The `Other` subject card should link to `/request-tutor` instead of the directory
   - _Requirements: 14.1, 14.2, 14.3_
 
-- [ ] 22. Navbar update
+- [x] 22. Navbar update
   - Update `frontend/src/components/layout/Navbar.tsx` to include "Find a Tutor" link (`/tutors`) and "Become a Tutor" link (`/become-a-tutor`)
   - Ensure mobile nav menu includes both new links
   - Keep all existing nav items (How It Works, About, Sign in/User menu, etc.)
   - _Requirements: 15.1, 15.2, 15.3, 15.4_
 
-- [ ] 23. Final Checkpoint — ensure all tests pass, ask the user if questions arise.
+- [x] 23. Final Checkpoint — ensure all tests pass, ask the user if questions arise.

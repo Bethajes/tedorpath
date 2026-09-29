@@ -14,8 +14,8 @@ interface NavItem {
 }
 
 const NAV_ITEMS: NavItem[] = [
-  { to: '/request-tutor', label: 'Find a Tutor' },
-  { to: '/about#become-a-tutor', label: 'Become a Tutor', anchor: true },
+  { to: '/tutors', label: 'Find a Tutor' },
+  { to: '/become-a-tutor', label: 'Become a Tutor' },
   { to: '/#how-it-works', label: 'How It Works', anchor: true },
   { to: '/about', label: 'About' },
 ]
@@ -80,7 +80,7 @@ export function Navbar() {
             to="/request-tutor"
             className="ml-3 inline-flex items-center rounded-lg bg-brand-600 px-5 py-2.5 text-[0.95rem] font-medium text-white shadow-sm transition-colors hover:bg-brand-700"
           >
-            Find a Tutor
+            Request a Tutor
           </Link>
 
           {user ? (
@@ -166,7 +166,7 @@ export function Navbar() {
                 onClick={closeMenu}
                 className="block rounded-lg bg-brand-600 px-4 py-3.5 text-center text-base font-medium text-white transition-colors hover:bg-brand-700"
               >
-                Find a Tutor
+                Request a Tutor
               </Link>
             </li>
             {user ? (

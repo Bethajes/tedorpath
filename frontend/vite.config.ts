@@ -41,5 +41,10 @@ export default defineConfig({
     globals: true,
     setupFiles: ['./src/test/setup.ts'],
     include: ['src/**/*.test.{ts,tsx}'],
+    // The property tests render a component 100 times inside a single test, and
+    // jsdom rendering is not fast. Several test files run in parallel, so the
+    // default 5s budget is not enough headroom: these tests pass in seconds on
+    // an idle machine and then fail purely because the suite was busy.
+    testTimeout: 30_000,
   },
 })

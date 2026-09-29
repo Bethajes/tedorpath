@@ -11,7 +11,7 @@
     "postinstall": "prisma generate",
     "dev": "node --watch main.js",
     "start": "node main.js",
-    "test": "node --test tests/*.test.mjs",
+    "test": "node --test --test-concurrency=1 tests/*.test.mjs",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate deploy",
     "db:migrate:dev": "prisma migrate dev",
@@ -28,6 +28,7 @@
     "cors": "^2.8.5",
     "dotenv": "^18.0.4",
     "express": "^5.1.0",
+    "multer": "^2.4.0",
     "pg": "^8.23.0",
     "zod": "^4.6.5"
   },

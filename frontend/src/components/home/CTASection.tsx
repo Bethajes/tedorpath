@@ -1,7 +1,6 @@
 import { Link } from 'react-router-dom'
 
 import { Container } from '@/components/layout/PageShell'
-import { buildTutorRequestHref } from '@/lib/tutorRequestQuery'
 
 export function CTASection() {
   return (
@@ -41,7 +40,7 @@ export function CTASection() {
 
             <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:items-center">
               <Link
-                to={buildTutorRequestHref()}
+                to="/tutors"
                 className="group inline-flex items-center justify-center gap-2 rounded-lg bg-white px-6 py-3.5 text-base font-medium text-brand-800 shadow-sm transition-colors hover:bg-brand-50"
               >
                 Find a Tutor

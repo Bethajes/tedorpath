@@ -125,6 +125,21 @@ export const env = {
     return process.env.FRONTEND_URL?.trim().replace(/\/+$/, '') ?? ''
   },
   /**
+   * Where uploaded profile photos are written and served from.
+   *
+   * Defaults to `uploads/` beside the backend so a fresh clone works with no
+   * configuration at all. The directory is served as read-only static content
+   * and is created on demand.
+   *
+   * This is deliberately local disk: it suits a single-node deployment and
+   * keeps the app runnable with no external services. A multi-instance
+   * deployment needs shared storage (S3 or equivalent) instead — the stored
+   * value in the database is a URL, so only `storage.js` has to change.
+   */
+  get uploadDir() {
+    return process.env.UPLOAD_DIR?.trim() || 'uploads'
+  },
+  /**
    * Refuses to serve admin routes unless a token is configured when running in
    * production, so a misconfigured deploy fails loudly instead of exposing
    * client personal data.

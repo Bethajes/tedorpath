@@ -18,6 +18,9 @@ import {
   PageFallback,
   RegisterPage,
   RequestTutorPage,
+  TutorDirectoryPage,
+  TutorOnboardingPage,
+  TutorProfilePage,
 } from '@/app/publicPages'
 
 const admin = (element: ReactNode) => (
@@ -34,6 +37,14 @@ export const router = createBrowserRouter([
   { path: '/request-tutor', element: <RequestTutorPage /> },
   { path: '/about', element: <AboutPage /> },
   { path: '/contact', element: <ContactPage /> },
+
+  // Tutor marketplace — public directory and individual profile pages
+  // Requirements: 8.1, 10.1
+  { path: '/tutors', element: <TutorDirectoryPage /> },
+  { path: '/tutors/:id', element: <TutorProfilePage /> },
+
+  // Tutor onboarding — auth-gated (Requirement 11.1)
+  { path: '/become-a-tutor', element: <TutorOnboardingPage /> },
 
   // Authentication. Public: signing in must never be behind a login. These
   // pages redirect away if a session already exists, and the guard

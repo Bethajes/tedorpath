@@ -43,3 +43,15 @@ export const LoginPage = lazy(() =>
 export const RegisterPage = lazy(() =>
   import('@/features/auth/pages/RegisterPage').then((m) => ({ default: m.RegisterPage })),
 )
+
+export const TutorDirectoryPage = lazy(() =>
+  import('@/features/tutors/TutorDirectoryPage').then((m) => ({ default: m.TutorDirectoryPage })),
+)
+
+export const TutorProfilePage = lazy(() =>
+  import('@/features/tutorProfile/TutorProfilePage').then((m) => ({ default: m.TutorProfilePage })),
+)
+
+export const TutorOnboardingPage = lazy(() =>
+  import('@/features/tutorOnboarding/TutorOnboardingPage').then((m) => ({ default: m.TutorOnboardingPage })),
+)

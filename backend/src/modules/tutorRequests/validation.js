@@ -109,6 +109,21 @@ export const tutorRequestSchema = z
     preferredTime: optionalText(120).optional(),
     budget: optionalText(80).optional(),
     additionalInfo: optionalText(500).optional(),
+
+    /**
+     * Optional link to the TutorProfile the client picked in the directory.
+     *
+     * Nullable and optional, and deliberately validated for shape only: whether
+     * the profile exists is a service-layer check, because that needs the
+     * database. Omitting the field entirely must keep working exactly as it did
+     * before this column existed (Requirement 3.2), so there is no default and
+     * no coercion here — the form simply does not send it.
+     */
+    tutorProfileId: z
+      .string()
+      .uuid('Tutor profile must be a valid ID.')
+      .nullable()
+      .optional(),
   })
   // Reject unexpected keys rather than silently discarding them.
   .strict()

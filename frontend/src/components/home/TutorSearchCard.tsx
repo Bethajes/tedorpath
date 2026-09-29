@@ -2,7 +2,15 @@ import { useState, type FormEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
 
 import { EDUCATION_LEVELS, LEARNING_MODES, SUBJECTS } from '@/features/tutorRequest/tutorRequest.constants'
-import { buildTutorRequestHref } from '@/lib/tutorRequestQuery'
+import { OTHER_SUBJECT_ENTRY, SUBJECT_GROUPS } from '@/components/home/subjectCatalog'
+
+/** Map from subject display name to its URL slug. */
+const SUBJECT_SLUG_MAP: Record<string, string> = Object.fromEntries(
+  [...SUBJECT_GROUPS.flatMap((g) => g.subjects), OTHER_SUBJECT_ENTRY].map((e) => [
+    e.subject,
+    e.slug,
+  ]),
+)
 
 const CONTROL_CLASSES =
   'w-full appearance-none rounded-lg border border-ink-200 bg-white py-2.5 pl-3.5 pr-9 text-[0.95rem] text-ink-900 shadow-sm transition-[border-color,box-shadow] hover:border-ink-300 focus:border-brand-600 focus:ring-2 focus:ring-brand-500 focus:ring-offset-1'
@@ -26,13 +34,15 @@ export function TutorSearchCard() {
 
   function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    navigate(
-      buildTutorRequestHref({
-        subject,
-        educationLevel,
-        learningMode,
-      }),
-    )
+    const params = new URLSearchParams()
+    if (subject) {
+      const slug = SUBJECT_SLUG_MAP[subject]
+      if (slug) params.set('subject', slug)
+    }
+    if (educationLevel) params.set('level', educationLevel)
+    if (learningMode) params.set('mode', learningMode)
+    const query = params.toString()
+    navigate(query ? `/tutors?${query}` : '/tutors')
   }
 
   return (

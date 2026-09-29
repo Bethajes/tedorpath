@@ -7,10 +7,12 @@
  */
 
 import assert from 'node:assert/strict'
+import { createHash, randomBytes } from 'node:crypto'
 import { after, before, describe, it } from 'node:test'
 import fc from 'fast-check'
 
 import { createApp } from '../src/app.js'
+import { SESSION_COOKIE_NAME } from '../src/modules/auth/cookies.js'
 import { closePrisma, prisma } from '../src/lib/prisma.js'
 
 let server
@@ -19,6 +21,7 @@ let baseUrl
 /** IDs created during these tests — cleaned up in after(). */
 const createdUserIds = []
 const createdProfileIds = []
+const createdSubjectIds = []
 
 before(async () => {
   server = createApp().listen(0)
@@ -30,6 +33,10 @@ after(async () => {
   // Clean up in dependency order: profiles, then users
   if (createdProfileIds.length) {
     await prisma.tutorProfile.deleteMany({ where: { id: { in: createdProfileIds } } })
+  }
+  // Subjects after profiles: the join rows are owned by the profile.
+  if (createdSubjectIds.length) {
+    await prisma.subject.deleteMany({ where: { id: { in: createdSubjectIds } } })
   }
   if (createdUserIds.length) {
     await prisma.user.deleteMany({ where: { id: { in: createdUserIds } } })
@@ -56,6 +63,42 @@ async function api(path, options = {}) {
   return { status: response.status, body }
 }
 
+/** Authenticated variant of `api`, carrying a session cookie. */
+async function apiAuth(path, options = {}, token) {
+  return api(path, {
+    ...options,
+    headers: {
+      ...options.headers,
+      Cookie: `${SESSION_COOKIE_NAME}=${token}`,
+    },
+  })
+}
+
+/**
+ * Creates a User with a live session.
+ *
+ * The session row stores the SHA-256 of the token, because that is what
+ * findSessionByToken() looks up (see auth/service.js); the cookie carries the
+ * raw token. Writing the row directly avoids an Argon2 hash per generated user.
+ */
+async function createUserWithSession() {
+  const user = await prisma.user.create({
+    data: { email: `test-${crypto.randomUUID()}@test.local`, name: 'Test Tutor' },
+  })
+  createdUserIds.push(user.id)
+
+  const token = randomBytes(32).toString('hex')
+  await prisma.session.create({
+    data: {
+      userId: user.id,
+      tokenHash: createHash('sha256').update(token).digest('hex'),
+      expiresAt: new Date(Date.now() + 3600000),
+    },
+  })
+
+  return { userId: user.id, token }
+}
+
 /**
  * Creates a minimal User + TutorProfile pair for testing.
  * Returns { userId, profileId }.
@@ -69,9 +112,14 @@ async function seedProfile(overrides = {}) {
   })
   createdUserIds.push(user.id)
 
+  return seedProfileFor(user.id, overrides)
+}
+
+/** Creates a TutorProfile for an existing user. */
+async function seedProfileFor(userId, overrides = {}) {
   const profile = await prisma.tutorProfile.create({
     data: {
-      userId: user.id,
+      userId,
       displayName: 'Test Tutor',
       headline: 'Test headline',
       bio: 'Test bio content',
@@ -82,7 +130,28 @@ async function seedProfile(overrides = {}) {
     },
   })
   createdProfileIds.push(profile.id)
-  return { userId: user.id, profileId: profile.id }
+  return { userId, profileId: profile.id }
+}
+
+/**
+ * Creates a pool of subjects for the many-to-many property.
+ * Returns their ids in creation order.
+ */
+async function seedSubjects(count) {
+  const ids = []
+  for (let index = 0; index < count; index += 1) {
+    const unique = `${index}-${crypto.randomUUID().slice(0, 8)}`
+    const subject = await prisma.subject.create({
+      data: {
+        name: `Subject ${unique}`,
+        slug: `subject-${unique}`,
+        category: 'Test category',
+      },
+    })
+    createdSubjectIds.push(subject.id)
+    ids.push(subject.id)
+  }
+  return ids
 }
 
 // ---------------------------------------------------------------------------
@@ -479,6 +548,185 @@ describe('Property 5: Public API responses never contain private fields', () => 
         },
       ),
       { numRuns: 5 },
+    )
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Property 12: Subject-to-profile many-to-many relationship round-trips
+// Feature: tutor-marketplace, Property 12: Subject-to-profile many-to-many relationship round-trips
+// Validates: Requirements 1.5, 2.5
+// ---------------------------------------------------------------------------
+
+describe('Property 12: Subject-to-profile many-to-many relationship round-trips', () => {
+  it('a profile reads back exactly the subjects it was given', async () => {
+    /**
+     * **Feature: tutor-marketplace, Property 12: Subject-to-profile many-to-many relationship round-trips**
+     * **Validates: Requirements 1.5, 2.5**
+     *
+     * For any TutorProfile associated with any non-empty set of subjects,
+     * querying the profile with its subjects included must return exactly the
+     * same set of subject IDs that were associated — no more, no fewer.
+     *
+     * The set is generated as a non-empty subset of a fixed subject pool, so
+     * the "no more" half of the claim is meaningful: the pool contains
+     * subjects the profile was *not* given, and any of those leaking into the
+     * read-back fails the assertion.
+     */
+    const pool = await seedSubjects(6)
+
+    await fc.assert(
+      fc.asyncProperty(
+        // A subset of a concrete array cannot contain duplicates, and minLength
+        // 1 keeps it non-empty as the property specifies.
+        fc.subarray(pool, { minLength: 1 }),
+        async (subjectIds) => {
+          const { profileId } = await seedProfile()
+
+          await prisma.tutorProfileSubject.createMany({
+            data: subjectIds.map((subjectId) => ({ tutorProfileId: profileId, subjectId })),
+          })
+
+          // Read back through the relationship, not through the write path.
+          const stored = await prisma.tutorProfile.findUnique({
+            where: { id: profileId },
+            include: { subjects: { include: { subject: true } } },
+          })
+
+          const readBack = stored.subjects.map((row) => row.subject.id).sort()
+
+          assert.deepEqual(
+            readBack,
+            [...subjectIds].sort(),
+            'the profile must read back exactly the subjects it was given',
+          )
+          // The join must not have invented rows for unassociated subjects.
+          assert.equal(stored.subjects.length, subjectIds.length)
+        },
+      ),
+      { numRuns: 10 },
+    )
+  })
+
+  it('the public detail endpoint returns exactly the associated subjects', async () => {
+    /**
+     * The same round-trip, observed through GET /api/tutors/:id, which is where
+     * a client actually sees the relationship. Profiles are APPROVED so they
+     * are visible in the public directory.
+     */
+    const pool = await seedSubjects(5)
+
+    await fc.assert(
+      fc.asyncProperty(
+        fc.subarray(pool, { minLength: 1 }),
+        async (subjectIds) => {
+          const { profileId } = await seedProfile({ profileStatus: 'APPROVED' })
+
+          await prisma.tutorProfileSubject.createMany({
+            data: subjectIds.map((subjectId) => ({ tutorProfileId: profileId, subjectId })),
+          })
+
+          const { status, body } = await api(`/api/tutors/${profileId}`)
+
+          assert.equal(status, 200)
+          const returned = body.data.subjects.map((subject) => subject.id).sort()
+
+          assert.deepEqual(returned, [...subjectIds].sort())
+        },
+      ),
+      { numRuns: 10 },
+    )
+  })
+
+  it('the public list endpoint returns exactly the associated subjects', async () => {
+    /**
+     * The directory list flattens the same join table through a different DTO
+     * from the detail endpoint, so it is checked separately: a bug in one
+     * mapper is invisible to a test that only reads the other.
+     */
+    const pool = await seedSubjects(5)
+
+    await fc.assert(
+      fc.asyncProperty(
+        fc.subarray(pool, { minLength: 1 }),
+        async (subjectIds) => {
+          const marker = `roundtrip-${crypto.randomUUID().slice(0, 8)}`
+          const { profileId } = await seedProfile({
+            profileStatus: 'APPROVED',
+            displayName: marker,
+          })
+
+          await prisma.tutorProfileSubject.createMany({
+            data: subjectIds.map((subjectId) => ({ tutorProfileId: profileId, subjectId })),
+          })
+
+          const { status, body } = await api('/api/tutors?limit=100')
+          assert.equal(status, 200)
+
+          const card = body.data.items.find((item) => item.displayName === marker)
+          assert.ok(card, 'the seeded profile should appear in the directory')
+
+          assert.deepEqual(
+            card.subjects.map((subject) => subject.id).sort(),
+            [...subjectIds].sort(),
+            'the list card must carry exactly the associated subjects',
+          )
+        },
+      ),
+      { numRuns: 10 },
+    )
+  })
+
+  it('narrowing the subject set through PATCH leaves no orphan join rows', async () => {
+    /**
+     * The same round-trip, but driven through the endpoint that actually
+     * rewrites the set. PATCH implements the replacement as delete-then-create
+     * rather than a diff, which is exactly the kind of thing that leaves stale
+     * join rows behind — so this is the path worth pinning. Doing the same
+     * delete/create by hand would only be testing Prisma, not this code.
+     */
+    const pool = await seedSubjects(4)
+
+    await fc.assert(
+      fc.asyncProperty(
+        fc.subarray(pool, { minLength: 1 }),
+        fc.subarray(pool, { minLength: 1 }),
+        async (initial, replacement) => {
+          const { userId, token } = await createUserWithSession()
+          const { profileId } = await seedProfileFor(userId)
+
+          const setSubjects = async (ids) => {
+            const result = await apiAuth(
+              '/api/tutor-profile',
+              { method: 'PATCH', body: JSON.stringify({ subjectIds: ids }) },
+              token,
+            )
+            assert.equal(result.status, 200, `PATCH failed: ${JSON.stringify(result.body)}`)
+            return result
+          }
+
+          await setSubjects(initial)
+          const final = await setSubjects(replacement)
+
+          // The response reflects the replacement, not the union.
+          assert.deepEqual(
+            final.body.data.subjects.map((subject) => subject.id).sort(),
+            [...replacement].sort(),
+          )
+
+          // And nothing survives in the join table.
+          const stored = await prisma.tutorProfile.findUnique({
+            where: { id: profileId },
+            include: { subjects: { include: { subject: true } } },
+          })
+          assert.deepEqual(
+            stored.subjects.map((row) => row.subject.id).sort(),
+            [...replacement].sort(),
+            'only the replacement set should remain',
+          )
+        },
+      ),
+      { numRuns: 10 },
     )
   })
 })

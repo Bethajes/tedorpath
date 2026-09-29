@@ -14,6 +14,16 @@ import { z } from 'zod'
 // Teaching modes from Prisma schema
 export const TEACHING_MODES = ['ONLINE', 'IN_PERSON', 'BOTH']
 
+/**
+ * Where uploaded profile photos are served from.
+ *
+ * A photo the tutor uploaded is stored as a path relative to the API origin
+ * rather than a full URL: the API can be reached through the Vite dev proxy, a
+ * CDN, or a different public hostname at different times, and a hardcoded host
+ * in the database would break the moment that changed.
+ */
+const UPLOAD_URL_PREFIX = '/api/uploads'
+
 // Education levels from existing constant (must match frontend/backend)
 export const EDUCATION_LEVELS = [
   'Primary School',
@@ -23,14 +33,23 @@ export const EDUCATION_LEVELS = [
   'Other',
 ]
 
-// Helper for optional text fields: trimmed, max length, transforms empty to null
+// Helper for optional text fields: trimmed, max length, transforms empty to null.
+//
+// `null` is accepted as an *input* as well as produced as an *output*. The
+// transform normalises '' to null, so any client that reads a field back and
+// sends it again unchanged would otherwise post `null` — which the untransformed
+// string schema would reject. The wizard does exactly that: it loads the draft,
+// keeps the profile in form state, and resubmits the whole object, so every
+// blank optional field arrives here as null. Accepting null keeps that
+// round-trip valid while still storing null in the database.
 const optionalText = (max) =>
   z
     .string()
     .trim()
     .max(max)
-    .transform((value) => (value === '' ? null : value))
+    .nullable()
     .optional()
+    .transform((value) => (value === '' ? null : value))
 
 // Helper for required text fields
 const requiredText = (fieldName, max) =>
@@ -50,8 +69,34 @@ const decimalField = () =>
     .optional()
 
 /**
+ * A profile photo is either an externally hosted http(s) URL or one of our own
+ * uploads.
+ *
+ * The `javascript:` family is the reason this is a whitelist rather than a
+ * "not obviously bad" check: the value is rendered into an `img src` on public
+ * tutor pages, and a stored `javascript:` URL would be a stored-XSS vector.
+ * A relative `/api/uploads/...` path is accepted so the upload endpoint can
+ * record a photo without knowing the public origin.
+ */
+const profilePhotoUrlField = () =>
+  optionalText(2048).refine(
+    (value) =>
+      value === undefined ||
+      value === null ||
+      value.startsWith('http://') ||
+      value.startsWith('https://') ||
+      value.startsWith(`${UPLOAD_URL_PREFIX}/`),
+    'Profile photo URL must be a valid URL.',
+  )
+
+/**
  * Schema for creating a new tutor profile.
- * All fields except userId are optional for draft creation.
+ *
+ * Only displayName, headline, and bio are required at creation time — the
+ * wizard collects the remaining fields across later steps and saves them via
+ * PATCH. teachingMode defaults to ONLINE so the NOT NULL DB column is always
+ * satisfied; the actual value is collected in step 4 and overwritten.
+ * Completeness is enforced at submit time by validateProfileCompleteness.
  */
 export const createTutorProfileSchema = z
   .object({
@@ -59,39 +104,36 @@ export const createTutorProfileSchema = z
     headline: requiredText('Headline', 160),
     bio: requiredText('Bio', 2000),
     location: optionalText(120),
-    profilePhotoUrl: optionalText(2048).refine(
-      (value) => value === undefined || value === null || value.startsWith('http'),
-      'Profile photo URL must be a valid URL.',
-    ),
-    teachingMode: z.enum(['ONLINE', 'IN_PERSON', 'BOTH'], {
-      required_error: 'Teaching mode is required.',
-    }),
-    studentLevels: z
-      .array(z.enum(EDUCATION_LEVELS), { required_error: 'At least one student level is required.' })
-      .min(1, 'At least one student level is required.'),
-    languages: z.array(z.string().trim().max(50)).min(1, 'At least one language is required.').optional(),
+    profilePhotoUrl: profilePhotoUrlField(),
+    teachingMode: z.enum(['ONLINE', 'IN_PERSON', 'BOTH']).optional(),
+    studentLevels: z.array(z.enum(EDUCATION_LEVELS)).optional(),
+    languages: z.array(z.string().trim().max(50)).optional(),
     availability: optionalText(300),
     hourlyRate: decimalField(),
     experience: optionalText(2000),
     education: optionalText(2000),
-    subjectIds: z.array(z.string().uuid()).min(1, 'At least one subject is required.').optional(),
+    subjectIds: z.array(z.string().uuid()).optional(),
   })
   .strict()
 
 /**
  * Schema for partially updating a tutor profile.
  * All fields are optional for PATCH.
+ *
+ * `userId` is accepted but never trusted: it is the identifier a client would
+ * tamper with to reach somebody else's profile, so the service compares it to
+ * the session user and rejects a mismatch with 403 (Requirement 6.4). Keeping
+ * it out of the schema entirely would only turn the attack into a confusing
+ * 422 "unrecognized key" instead of a clear authorization failure.
  */
 export const updateTutorProfileSchema = z
   .object({
+    userId: z.string().uuid('User ID must be a UUID.').optional(),
     displayName: z.string().trim().min(1, 'Display name cannot be empty.').max(100).optional(),
     headline: z.string().trim().min(1, 'Headline cannot be empty.').max(160).optional(),
     bio: z.string().trim().min(1, 'Bio cannot be empty.').max(2000).optional(),
     location: optionalText(120),
-    profilePhotoUrl: optionalText(2048).refine(
-      (value) => value === undefined || value === null || value.startsWith('http'),
-      'Profile photo URL must be a valid URL.',
-    ),
+    profilePhotoUrl: profilePhotoUrlField(),
     teachingMode: z.enum(['ONLINE', 'IN_PERSON', 'BOTH']).optional(),
     studentLevels: z.array(z.enum(EDUCATION_LEVELS)).optional(),
     languages: z.array(z.string().trim().max(50)).optional(),

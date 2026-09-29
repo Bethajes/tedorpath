@@ -1,9 +1,13 @@
 import cors from 'cors'
 import express from 'express'
+import path from 'node:path'
 
 import { env } from './config/env.js'
 import { adminRequestsRouter } from './modules/adminRequests/index.js'
+import { adminTutorsRouter } from './modules/adminTutors/index.js'
 import { authRouter } from './modules/auth/index.js'
+import { subjectsRouter } from './modules/subjects/index.js'
+import { uploadsRouter } from './modules/uploads/index.js'
 import { tutorProfileRouter } from './modules/tutorProfile/index.js'
 import { tutorRequestsRouter } from './modules/tutorRequests/index.js'
 import { tutorsRouter } from './modules/tutors/index.js'
@@ -42,11 +46,42 @@ export function createApp() {
   app.use('/api/auth', authRouter)
   app.use('/api/tutor-requests', tutorRequestsRouter)
   app.use('/api/tutors', tutorsRouter)
+  app.use('/api/subjects', subjectsRouter)
   app.use('/api/tutor-profile', tutorProfileRouter)
+  // Uploaded profile photos. Mounted before the 404 fallback below so stored
+  // URLs keep resolving.
+  app.use('/api/tutor-profile', uploadsRouter)
+
+  // Uploaded images, served straight from disk. `nosniff` matters here: it
+  // stops a browser from re-interpreting a file whose extension says image but
+  // whose content is something else.
+  app.use(
+    '/api/uploads',
+    express.static(path.resolve(env.uploadDir), {
+      index: false,
+      dotfiles: 'deny',
+      maxAge: '30d',
+      setHeaders(res) {
+        res.setHeader('X-Content-Type-Options', 'nosniff')
+        res.setHeader('Content-Disposition', 'inline')
+      },
+    }),
+  )
   // Admin surface. Not public: guarded by requireAdmin (see
   // src/middleware/adminAuth.js) and disabled in production unless
   // ADMIN_API_TOKEN is configured.
   app.use('/api/admin', adminRequestsRouter)
+  app.use('/api/admin', adminTutorsRouter)
+
+  // Unmatched /api paths answer with the standard error envelope. Express's
+  // default 404 is an HTML page, which a JSON client cannot parse — it reports
+  // "unexpected response" instead of the real cause (a wrong or missing route).
+  app.use('/api', (_req, res) => {
+    res.status(404).json({
+      success: false,
+      error: { code: 'NOT_FOUND', message: 'Endpoint not found.' },
+    })
+  })
 
   // Malformed JSON bodies are handled here so they do not surface as a 500.
   app.use((error, _req, res, _next) => {

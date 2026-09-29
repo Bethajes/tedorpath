@@ -114,6 +114,14 @@ export async function updateTutorProfileHandler(req, res) {
 
     if (!result.success) {
       switch (result.code) {
+        case 'FORBIDDEN':
+          return res.status(403).json({
+            success: false,
+            error: {
+              code: result.code,
+              message: result.message,
+            },
+          })
         case 'PROFILE_NOT_FOUND':
           return res.status(404).json({
             success: false,

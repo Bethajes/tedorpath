@@ -42,7 +42,9 @@ export async function createTutorProfile(userId, data) {
       bio: data.bio,
       location: data.location,
       profilePhotoUrl: data.profilePhotoUrl,
-      teachingMode: data.teachingMode,
+      // Default to ONLINE so the NOT NULL DB column is always satisfied.
+      // The real value is collected in step 4 and updated via PATCH.
+      teachingMode: data.teachingMode || 'ONLINE',
       studentLevels: data.studentLevels || [],
       languages: data.languages || ['English'],
       availability: data.availability,
@@ -114,17 +116,30 @@ export async function createTutorProfile(userId, data) {
 /**
  * Update a tutor profile.
  *
- * Requirements: 6.3, 6.4
+ * Requirements 6.3, 6.4
  * - Partial update (only specified fields)
- * - Verifies ownership server-side
+ * - Verifies ownership server-side: the target is always derived from the
+ *   session user, never from the request body. A `userId` in the body is only
+ *   an assertion of intent; if it names somebody else the request is refused
+ *   with FORBIDDEN rather than quietly redirected at the caller's own profile.
  *
- * @param {string} userId - User ID requesting the update
+ * @param {string} userId - Authenticated user ID from the session
  * @param {object} data - Validated partial update data
  * @returns {Promise<{success: true, data: object}|{success: false, code: string, message: string}>}
  */
 export async function updateTutorProfile(userId, data) {
   try {
-    // First, verify the profile exists and belongs to the user
+    // Requirement 6.4: refuse a tampered identifier before touching the database.
+    if (data.userId !== undefined && data.userId !== userId) {
+      return {
+        success: false,
+        code: 'FORBIDDEN',
+        message: 'You can only update your own tutor profile.',
+      }
+    }
+
+    // Ownership is established by the lookup key itself: the profile addressed
+    // is always the one owned by the session user.
     const profile = await prisma.tutorProfile.findUnique({
       where: { userId },
       include: {
@@ -144,8 +159,8 @@ export async function updateTutorProfile(userId, data) {
       }
     }
 
-    // Requirements 6.4: ownership is verified by userId lookup above
-    // Build update data
+    // Build update data. Fields are listed explicitly so that neither the
+    // client-supplied `userId` nor any unrecognised key can reach the update.
     const updateData = {
       displayName: data.displayName,
       headline: data.headline,
