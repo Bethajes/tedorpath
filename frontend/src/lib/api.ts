@@ -57,6 +57,9 @@ async function requestJson<T>(method: Method, path: string, body?: unknown): Pro
     response = await fetch(`${API_BASE_URL}${path}`, {
       method,
       headers,
+      // The sign-in session is an HttpOnly cookie, so the browser has to be
+      // allowed to send it — including when the API lives on another host.
+      credentials: 'include',
       ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
     })
   } catch {

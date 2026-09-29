@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 
 import { Logo } from '@/components/brand/Logo'
+import { useAuth } from '@/features/auth/useAuth'
+import { UserMenu } from '@/features/auth/components/UserMenu'
 import { cn } from '@/lib/cn'
 
 interface NavItem {
@@ -21,6 +23,7 @@ const NAV_ITEMS: NavItem[] = [
 export function Navbar() {
   const [open, setOpen] = useState(false)
   const location = useLocation()
+  const { status, user } = useAuth()
   const panelId = 'primary-navigation'
 
   // Escape closes the panel and returns focus to the toggle.
@@ -79,6 +82,24 @@ export function Navbar() {
           >
             Find a Tutor
           </Link>
+
+          {user ? (
+            <div className="ml-2">
+              <UserMenu />
+            </div>
+          ) : (
+            /* Shown while the session is still being checked would make the
+               header flicker on every page load, so it only appears once we
+               know for certain. */
+            status === 'anonymous' ? (
+              <Link
+                to="/login"
+                className="ml-2 rounded-lg px-3 py-2 text-[0.95rem] font-medium text-ink-700 transition-colors hover:bg-ink-50"
+              >
+                Sign in
+              </Link>
+            ) : null
+          )}
         </nav>
 
         <button
@@ -148,6 +169,34 @@ export function Navbar() {
                 Find a Tutor
               </Link>
             </li>
+            {user ? (
+              <li className="flex items-center justify-between gap-3 rounded-lg bg-ink-50 px-3 py-3">
+                <span className="min-w-0">
+                  <span className="block truncate text-sm font-medium text-ink-900">
+                    {user.name}
+                  </span>
+                  <span className="block truncate text-xs text-ink-500">{user.email}</span>
+                </span>
+                <UserMenu />
+              </li>
+            ) : status === 'anonymous' ? (
+              <li className="grid gap-2 sm:grid-cols-2">
+                <Link
+                  to="/login"
+                  onClick={closeMenu}
+                  className="block rounded-lg border border-ink-200 px-4 py-3 text-center text-base font-medium text-ink-800 transition-colors hover:bg-ink-50"
+                >
+                  Sign in
+                </Link>
+                <Link
+                  to="/register"
+                  onClick={closeMenu}
+                  className="block rounded-lg px-4 py-3 text-center text-base font-medium text-brand-700 transition-colors hover:bg-brand-50"
+                >
+                  Create account
+                </Link>
+              </li>
+            ) : null}
             <li>
               <Link
                 to="/contact"

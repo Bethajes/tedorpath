@@ -4,6 +4,9 @@
   "private": true,
   "type": "module",
   "main": "main.js",
+  "engines": {
+    "node": ">=20.19"
+  },
   "scripts": {
     "postinstall": "prisma generate",
     "dev": "node --watch main.js",
@@ -14,11 +17,13 @@
     "db:migrate:dev": "prisma migrate dev",
     "db:status": "prisma migrate status",
     "db:studio": "prisma studio",
-    "setup": "prisma generate && prisma migrate deploy"
+    "setup": "prisma generate && prisma migrate deploy",
+    "auth:check": "node scripts/check-google-auth.mjs"
   },
   "dependencies": {
     "@prisma/adapter-pg": "^7.10.0",
     "@prisma/client": "^7.10.0",
+    "argon2": "^0.45.1",
     "cors": "^2.8.5",
     "dotenv": "^18.0.4",
     "express": "^5.1.0",

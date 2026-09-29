@@ -19,6 +19,11 @@ export default defineConfig({
       '/api': {
         target: process.env.VITE_DEV_API_TARGET ?? 'http://localhost:4000',
         changeOrigin: true,
+        // Forward the host and scheme the browser actually used, alongside the
+        // rewritten one. The OAuth callback has to be served from the same
+        // origin the app is served from — otherwise the session cookie is set
+        // for localhost:4000 and the app on localhost:5173 never sends it back.
+        xfwd: true,
       },
     },
     watch: {

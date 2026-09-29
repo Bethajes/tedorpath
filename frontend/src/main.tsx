@@ -2,6 +2,7 @@ import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 
 import { App } from './app/App'
+import { AuthProvider } from './features/auth/AuthProvider'
 import './index.css'
 
 const container = document.getElementById('root')
@@ -12,6 +13,10 @@ if (!container) {
 
 createRoot(container).render(
   <StrictMode>
-    <App />
+    {/* Above the router so every page — the header included — can see who is
+        signed in, and so the session is resolved once on startup. */}
+    <AuthProvider>
+      <App />
+    </AuthProvider>
   </StrictMode>,
 )

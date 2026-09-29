@@ -6,10 +6,14 @@ import { prisma } from '../../lib/prisma.js'
  * Maps the API field names onto the stored columns. The service returns only
  * the new id — the full record (which contains personal contact details) is
  * never echoed back to the client.
+ *
+ * `options.userId` links the request to a signed-in account when the visitor
+ * has one. It is optional on purpose: anonymous requests are the norm today.
  */
-export async function createTutorRequest(data) {
+export async function createTutorRequest(data, { userId = null } = {}) {
   const record = await prisma.tutorRequest.create({
     data: {
+      userId,
       fullName: data.fullName,
       phone: data.phone,
       telegramUsername: data.telegram ?? null,

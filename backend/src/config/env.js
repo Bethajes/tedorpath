@@ -56,6 +56,75 @@ export const env = {
     return process.env.ADMIN_API_TOKEN ?? ''
   },
   /**
+   * How long a newly issued sign-in session stays valid.
+   *
+   * Sessions are opaque random tokens stored hashed, so there is no signing
+   * secret to keep and nothing to rotate here: revocation is a database write
+   * and expiry is a timestamp on the row.
+   */
+  get sessionTtlDays() {
+    const raw = process.env.SESSION_TTL_DAYS
+    if (!raw) return 30
+    const parsed = Number.parseInt(raw, 10)
+    if (Number.isNaN(parsed) || parsed <= 0) {
+      throw new Error('SESSION_TTL_DAYS must be a positive whole number of days')
+    }
+    return parsed
+  },
+  /**
+   * Google sign-in (OAuth 2.0 / OpenID Connect).
+   *
+   * Both belong in the backend environment and nowhere else: everything named
+   * `VITE_*` is inlined into the browser bundle. Leaving `googleClientId` empty
+   * simply switches the provider off — the sign-in buttons stay in the UI and
+   * the endpoint answers with a clear "not configured" rather than pretending.
+   */
+  get googleClientId() {
+    return process.env.GOOGLE_CLIENT_ID?.trim() ?? ''
+  },
+  /**
+   * Whether to *offer* Google sign-in.
+   *
+   * Requires a client id, and can be switched off explicitly with
+   * `GOOGLE_AUTH_ENABLED=false` while the OAuth client is still being set up.
+   * That matters: the sign-in page only shows a provider the server says it can
+   * handle, so a half-configured integration disappears from the UI instead of
+   * sending visitors to a Google error page.
+   */
+  get googleAuthEnabled() {
+    const flag = process.env.GOOGLE_AUTH_ENABLED?.trim().toLowerCase()
+    if (flag === 'false' || flag === '0' || flag === 'off' || flag === 'no') return false
+    return Boolean(this.googleClientId)
+  },
+  /**
+   * Optional. PKCE means a public client does not need a secret, but a
+   * confidential "Web application" client is issued one and Google will refuse
+   * the token exchange without it.
+   */
+  get googleClientSecret() {
+    return process.env.GOOGLE_CLIENT_SECRET?.trim() ?? ''
+  },
+  /**
+   * Optional. Defaults to this server's own origin + /api/auth/google/callback.
+   * Set it when the API sits behind a proxy, where the request's host is not
+   * the address the browser will come back to. It has to match a redirect URI
+   * registered in the Google Cloud console exactly.
+   */
+  get googleRedirectUri() {
+    return process.env.GOOGLE_REDIRECT_URI?.trim() ?? ''
+  },
+  /**
+   * Where the browser goes once sign-in finishes.
+   *
+   * Google sends the callback to this server, but the visitor has to end up back
+   * on the website, so the redirect target has to be the app's public origin.
+   * Set it when the API is on a different host from the frontend; otherwise the
+   * first entry of CORS_ORIGINS is used, which is the frontend in practice.
+   */
+  get frontendUrl() {
+    return process.env.FRONTEND_URL?.trim().replace(/\/+$/, '') ?? ''
+  },
+  /**
    * Refuses to serve admin routes unless a token is configured when running in
    * production, so a misconfigured deploy fails loudly instead of exposing
    * client personal data.

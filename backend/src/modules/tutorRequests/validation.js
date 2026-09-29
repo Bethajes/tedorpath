@@ -1,5 +1,7 @@
 import { z } from 'zod'
 
+import { EMAIL_PATTERN, PHONE_PATTERN, TELEGRAM_PATTERN } from '../../lib/validators.js'
+
 /**
  * Server-side validation for incoming tutor requests.
  *
@@ -37,10 +39,6 @@ export const EDUCATION_LEVELS = [
 ]
 
 export const LEARNING_MODES = ['Online', 'In-person', 'Either']
-
-const PHONE_PATTERN = /^[0-9+()\-\s]+$/
-const TELEGRAM_PATTERN = /^@?[A-Za-z0-9_]{4,32}$/
-const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/
 
 /** Optional text: trimmed, length-capped, and normalised to null when blank. */
 const optionalText = (max) =>

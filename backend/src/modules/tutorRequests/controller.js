@@ -22,7 +22,10 @@ export async function createTutorRequestHandler(req, res) {
   }
 
   try {
-    const { id } = await createTutorRequest(result.data)
+    // `req.user` is set by optionalAuth. It is null for an anonymous visitor,
+    // which is still a fully supported way to ask for a tutor — the form simply
+    // does not link the request to an account.
+    const { id } = await createTutorRequest(result.data, { userId: req.user?.id ?? null })
 
     res.status(201).json({
       success: true,

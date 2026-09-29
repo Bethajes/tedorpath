@@ -1,7 +1,11 @@
 // Prisma schema for Tedor Tutors.
 //
-// Step 3 scope: only the public tutor-request form and its persistence.
-// No admin, tutor, client, matching, payment or scheduling models yet.
+// Two areas so far:
+//   * the public tutor-request form and its persistence (no client, tutor,
+//     matching, payment or scheduling models yet);
+//   * real user authentication — a User, the login methods connected to it
+//     (Account) and the server-side sessions (Session) that authenticate a
+//     browser.
 
 generator client {
   provider = "prisma-client-js"
@@ -21,8 +25,142 @@ enum TutorRequestStatus {
   CANCELLED
 }
 
+/// What a person may do in the product.
+///
+/// `CLIENT` is the only role public registration can produce. `TUTOR` and
+/// `ADMIN` are only ever set server-side; nothing a visitor submits is allowed
+/// to choose a role. Note that the admin dashboard is still protected by its
+/// own shared token (src/middleware/adminAuth.js) and does not use this enum
+/// yet.
+enum UserRole {
+  CLIENT
+  TUTOR
+  ADMIN
+}
+
+/// A login method connected to a user.
+///
+/// One person has exactly one User row however many of these they have, so a
+/// Google sign-in and an email/password sign-in reach the same account.
+/// `CREDENTIALS` is the only provider that may carry a `passwordHash`.
+enum AuthProvider {
+  GOOGLE
+  CREDENTIALS
+  PHONE
+  TELEGRAM
+}
+
+model User {
+  id String @id @default(uuid()) @db.Uuid
+
+  // Always stored normalized (trimmed and lowercased) so uniqueness is
+  // case-insensitive. Nothing may write this column without normalizing first.
+  email    String @unique @db.VarChar(320)
+  name     String @db.VarChar(80)
+  image    String? @db.VarChar(2048)
+  phone    String? @unique @db.VarChar(20)
+  role     UserRole @default(CLIENT)
+
+  // A timestamp rather than a boolean, so "when was it verified" is auditable.
+  // Email verification and phone OTP are not implemented yet, so these stay
+  // null; they exist so the flow does not need a migration when it arrives.
+  emailVerifiedAt DateTime?
+  phoneVerifiedAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  accounts       Account[]
+  sessions       Session[]
+  tutorRequests  TutorRequest[]
+
+  @@map("users")
+}
+
+/// One login method belonging to a user.
+model Account {
+  id String @id @default(uuid()) @db.Uuid
+
+  userId String @db.Uuid
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  provider AuthProvider
+  /// Identifier at the provider — Google's `sub`, or the normalized email for
+  /// a local credentials account.
+  providerAccountId String @db.VarChar(191)
+
+  /// Argon2id hash. Only ever set for `CREDENTIALS`; the database enforces
+  /// this with a CHECK constraint (see the auth migration).
+  passwordHash String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([provider, providerAccountId])
+  @@index([userId])
+  @@map("accounts")
+}
+
+/// A server-side session.
+///
+/// The cookie handed to the browser carries a random token; only its SHA-256
+/// digest is stored here, so a leaked database cannot be replayed as a login.
+/// `revokedAt` is set on sign-out, which invalidates the row without deleting
+/// the audit trail.
+model Session {
+  id String @id @default(uuid()) @db.Uuid
+
+  userId String @db.Uuid
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  tokenHash String @unique @db.Char(64)
+  expiresAt DateTime
+  revokedAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("sessions")
+}
+
+/// An OAuth sign-in in progress (Google, and later phone OTP / Telegram).
+///
+/// The `state` parameter is the CSRF token: it comes back on the callback and
+/// has to match something only the server issued. It is stored here, hashed,
+/// rather than in a cookie, so it cannot be forged by the client and survives a
+/// restart or a second API instance. The PKCE `codeVerifier` lives here for the
+/// same reason — the exchange cannot be completed without it.
+///
+/// Rows are single-use and short-lived: the callback deletes the row it
+/// consumes, and expired ones are pruned when a new flow starts.
+model LoginFlow {
+  id String @id @default(uuid()) @db.Uuid
+
+  provider AuthProvider
+  /// SHA-256 of the random `state` sent to the provider.
+  stateHash String @unique @db.Char(64)
+  /// PKCE secret for this attempt; its SHA-256 went to the provider as the
+  /// code challenge.
+  codeVerifier String @db.VarChar(128)
+  expiresAt    DateTime
+
+  createdAt DateTime @default(now())
+
+  @@index([expiresAt])
+  @@map("login_flows")
+}
+
 model TutorRequest {
   id String @id @default(uuid()) @db.Uuid
+
+  // Set when the request came from a signed-in account. Nullable and optional:
+  // the public form still works for visitors, which is why this is never
+  // required. `onDelete: SetNull` keeps a request readable after the account
+  // behind it is deleted.
+  userId String? @db.Uuid
+  user   User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
 
   // Contact details
   fullName         String
@@ -49,5 +187,6 @@ model TutorRequest {
 
   @@index([status])
   @@index([createdAt])
+  @@index([userId])
   @@map("tutor_requests")
 }

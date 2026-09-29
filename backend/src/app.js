@@ -3,6 +3,7 @@ import express from 'express'
 
 import { env } from './config/env.js'
 import { adminRequestsRouter } from './modules/adminRequests/index.js'
+import { authRouter } from './modules/auth/index.js'
 import { tutorRequestsRouter } from './modules/tutorRequests/index.js'
 import { healthRouter } from './routes/health.js'
 
@@ -26,11 +27,17 @@ export function createApp() {
         }
         callback(null, allowedOrigins.includes(origin))
       },
+      // Sessions are carried in an HttpOnly cookie, so a cross-origin request
+      // from an allow-listed frontend has to be allowed to send it. This is only
+      // safe because the origin above is an explicit allow-list: the cors
+      // package refuses to pair `*` with credentials, and we never ask for it.
+      credentials: true,
     }),
   )
   app.use(express.json({ limit: '100kb' }))
 
   app.use('/api/health', healthRouter)
+  app.use('/api/auth', authRouter)
   app.use('/api/tutor-requests', tutorRequestsRouter)
   // Admin surface. Not public: guarded by requireAdmin (see
   // src/middleware/adminAuth.js) and disabled in production unless

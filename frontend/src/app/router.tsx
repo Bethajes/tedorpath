@@ -13,8 +13,10 @@ import {
   AboutPage,
   ContactPage,
   HomePage,
+  LoginPage,
   NotFoundPage,
   PageFallback,
+  RegisterPage,
   RequestTutorPage,
 } from '@/app/publicPages'
 
@@ -32,6 +34,12 @@ export const router = createBrowserRouter([
   { path: '/request-tutor', element: <RequestTutorPage /> },
   { path: '/about', element: <AboutPage /> },
   { path: '/contact', element: <ContactPage /> },
+
+  // Authentication. Public: signing in must never be behind a login. These
+  // pages redirect away if a session already exists, and the guard
+  // (features/auth/RequireAuth) is ready for the first private screen.
+  { path: '/login', element: <LoginPage /> },
+  { path: '/register', element: <RegisterPage /> },
 
   // Admin area. Not part of the public site: gated by RequireAdminToken, and
   // every /api/admin call is additionally rejected by the backend without a

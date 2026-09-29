@@ -17,6 +17,9 @@ incoming requests.
 | Client request form at `/request-tutor` | Done, with client-side validation |
 | `POST /api/tutor-requests` + PostgreSQL persistence | Done |
 | Admin dashboard (`/admin`) | Done, **development-only access** |
+| User accounts, sessions, sign-in / sign-up pages | Done, email + password |
+| Google sign-in | Built and tested, **switched off** until its redirect URI is registered |
+| Phone OTP, Telegram, password reset, email verification | Not started |
 | Tutor accounts, matching, payments, scheduling | Not started |
 
 Full working flow today:
@@ -24,13 +27,120 @@ Full working flow today:
 ```
 Client submits form  ->  POST /api/tutor-requests  ->  validated  ->  PostgreSQL
 Admin opens /admin   ->  sees it as NEW  ->  changes status  ->  adds internal notes
+Visitor signs up     ->  POST /api/auth/register  ->  user + credentials account
+                      ->  session row  ->  HttpOnly cookie  ->  navbar shows their name
+Visitor signs in     ->  POST /api/auth/login  ->  same cookie  ->  GET /api/auth/me works
+Visitor signs out    ->  POST /api/auth/logout  ->  session revoked  ->  cookie cleared
 ```
+
+### Authentication
+
+Real user authentication, separate from the admin token:
+
+- **One account, many sign-in methods.** `User` is the person; `Account` rows
+  are the ways they prove who they are (`CREDENTIALS` today, `GOOGLE`,
+  `PHONE`, `TELEGRAM` later). Signing in with a second provider reaches the
+  same user rather than creating a second one.
+- **Passwords** are hashed with Argon2id (OWASP parameters, 19 MiB / 2 passes /
+  1 lane). The plaintext never leaves the request, and no response can carry a
+  hash — user rows are read through an explicit allow-list of columns.
+- **Sessions are opaque.** The browser holds a 256-bit random token in an
+  HttpOnly, `SameSite=Lax` cookie (`Secure` in production); the database stores
+  only its SHA-256 digest, so a database leak cannot be replayed as a login.
+  Signing out revokes the row rather than deleting it.
+- **No token in browser storage.** Nothing is written to `localStorage` or
+  `sessionStorage`, so there is nothing for a cross-site script to read.
+- **Roles are never accepted from input.** Public registration can only ever
+  produce a `CLIENT`; the schemas reject unknown keys, so a `role` in the body
+  is refused outright rather than quietly ignored.
+- **Sign-in failures are indistinguishable**: the same code, message and status
+  whether the address is unknown, the password is wrong, or the account has no
+  password — and the unknown-address path still pays for a hash comparison so
+  the response time does not give it away.
+- **The admin dashboard is untouched.** It keeps its own shared-token guard, and
+  a normal user's session cookie does not open it.
+- A signed-in visitor's tutor request is linked to their account, but signing in
+  is never required to ask for a tutor.
+
+### Google sign-in
+
+The authorization-code flow with PKCE, driven entirely by the API. The button
+on `/login` and `/register` is a plain link to `/api/auth/google`; the browser
+holds no client id, no secret and no OAuth state.
+
+- **CSRF + replay protection.** A random `state` and a PKCE `code_verifier` are
+  generated per attempt and stored server-side in the `login_flows` table
+  (hashed), so neither can be forged by the client. The flow row is deleted the
+  moment it is used, which is what makes a callback URL single-use, and it
+  expires after five minutes.
+- **One person, one account.** A Google identity is keyed on Google's `sub`, so
+  an account can only ever belong to one Tedor user. If somebody who already has
+  a password account signs in with Google at the same address, the provider is
+  **linked** to that account rather than creating a rival one. Linking only ever
+  happens on a **verified** email: an unverified address is refused rather than
+  used to claim somebody's email.
+- **Failures are the API's to explain.** The callback redirects back to the
+  website with a short code (`?authError=…`), and the login page turns that into
+  a sentence. Google's own error text and the client secret never reach the
+  browser.
+
+Configuring it, all backend-side:
+
+| Variable | Required | Purpose |
+| --- | --- | --- |
+| `GOOGLE_CLIENT_ID` | to enable | OAuth client id |
+| `GOOGLE_AUTH_ENABLED` | no (on) | `false` hides Google from the sign-in pages |
+| `GOOGLE_CLIENT_SECRET` | no | Only for a confidential "Web application" client |
+| `GOOGLE_REDIRECT_URI` | no | Overrides the callback URL (see below) |
+| `FRONTEND_URL` | no | Where the browser is sent after sign-in |
+
+**Google is currently switched off** (`GOOGLE_AUTH_ENABLED=false` in
+`backend/.env`) because its redirect URI is not registered in the Google Cloud
+console yet. The sign-in pages read `/api/auth/providers` and show a provider
+button only when the server says it is usable, so nothing half-configured is
+offered to a visitor. Flip the flag to `true` — no code change, no rebuild — once
+`npm run auth:check` says Google accepts the redirect URI.
+
+**The callback must be answered on the origin the app is served from.** The
+session cookie is set by whoever answers the callback, and a browser only sends
+cookies back to the origin that stored them — so a callback answered on the API's
+own host leaves the visitor apparently signed in but not actually holding a
+session. The dev server and nginx both proxy `/api` and forward the original
+host, so the app derives that origin from `x-forwarded-host` and the whole
+conversation happens on the app's own origin. When the API has its own host in
+production there is no proxy, the API answers the callback, and the app sends
+the cookie back with `credentials: 'include'`.
+
+**Check it at any time:**
+
+```bash
+cd backend && npm run auth:check
+```
+
+That asks the app which redirect URI it will use and asks Google whether it is
+registered, so a failure reads as "add this one line" rather than a guess:
+
+```
+  redirect URI  http://localhost:5173/api/auth/google/callback
+  ✗ Google does not recognise this redirect URI.
+```
+
+Register it in the Google Cloud console (APIs & Services → Credentials → your
+client → *Authorized redirect URIs*), matching character for character, then run
+the command again. If Google accepts it but refuses a particular account, the
+app is still in the **Testing** publishing status and that account has to be
+listed under *OAuth consent screen → Test users*.
+
+Not built yet, deliberately: phone OTP, Telegram, password reset, email
+verification, and any client/tutor area to protect.
 
 ---
 
 ## Prerequisites
 
-- **Node.js 20+** (this project is developed on 22)
+- **Node.js 20.19+** (this project is developed on 22). Prisma 7 requires it, and
+  so does the Argon2 native module the API hashes passwords with — on Node 18
+  `npm test` crashes rather than reporting a failure.
 - **npm 10+**
 - **PostgreSQL 16** running locally
 
@@ -161,13 +271,15 @@ and CORS is not involved.
 
 ```
 backend/
-  prisma/schema.prisma              TutorRequest model + status enum
+  prisma/schema.prisma              User/Account/Session + TutorRequest models
   prisma/migrations/                applied migrations
   prisma7.config.ts                 Prisma 7 config (connection URL lives here)
   src/app.js                        Express app, CORS, error handling
   src/config/env.js                 environment access
   src/lib/prisma.js                 Prisma client + pool
+  src/lib/validators.js             shared input patterns
   src/middleware/adminAuth.js       admin guard (dev-only token)
+  src/modules/auth/                 register/login/logout/me, sessions, Argon2id, Google OAuth
   src/modules/tutorRequests/        public submission endpoint
   src/modules/adminRequests/        admin read/update/delete endpoints
   src/routes/health.js              GET /api/health
@@ -182,6 +294,7 @@ frontend/
   src/components/layout/            public Navbar/Footer/PageShell, admin AdminShell
   src/components/home/              homepage sections + subject catalogue
   src/features/tutorRequest/        public form, Zod schema, API call
+  src/features/auth/                auth store, provider, guard, sign-in/up pages
   src/features/adminRequests/       admin API, types, components
   src/pages/                        all route components
   src/lib/                          api client, query helpers, hooks
@@ -213,6 +326,23 @@ into an invalid state.
 | `GET` | `/api/health` | Liveness check |
 | `POST` | `/api/tutor-requests` | Submit a request. `201` returns `{ id }` |
 
+### Authentication
+
+Sessions travel in the `tedor_session` cookie (`HttpOnly`, `SameSite=Lax`,
+`Secure` in production). The browser never has to hold the token, so these
+endpoints work with plain `credentials: 'include'` and a cross-origin request
+only works from an allow-listed `CORS_ORIGINS` entry.
+
+| Method | Path | Notes |
+| --- | --- | --- |
+| `POST` | `/api/auth/register` | Creates a `CLIENT`. `201` returns the user and sets the cookie |
+| `POST` | `/api/auth/login` | Sets the cookie. `401` is deliberately vague |
+| `POST` | `/api/auth/logout` | Revokes the session, clears the cookie. Always `200` |
+| `GET` | `/api/auth/me` | The signed-in user, or `401` |
+| `GET` | `/api/auth/providers` | Which sign-in methods are on offer, e.g. `{ providers: ["GOOGLE"] }` |
+| `GET` | `/api/auth/google` | `302` to Google. Starts the OAuth flow |
+| `GET` | `/api/auth/google/callback` | Google calls this. `302` back to the website with the session cookie |
+
 ### Admin (all require `Authorization: Bearer <ADMIN_API_TOKEN>`)
 
 | Method | Path | Notes |
@@ -231,8 +361,8 @@ the stored record always reflects the original request.
 ## Tests
 
 ```bash
-cd backend  && npm test     # API tests against a real app + real database
-cd frontend && npm test     # admin UI tests (vitest + Testing Library)
+cd backend  && npm test     # auth + admin API tests against a real app + real database
+cd frontend && npm test     # auth, admin and homepage UI tests (vitest + Testing Library)
 ```
 
 Backend tests create and clean up their own records. They need `ADMIN_API_TOKEN`
@@ -259,6 +389,11 @@ cd backend  && npm run db:status    # migration status
 | `PORT` | no (4000) | API port |
 | `CORS_ORIGINS` | yes | Comma-separated allowed browser origins |
 | `ADMIN_API_TOKEN` | yes in production | Shared admin token |
+| `SESSION_TTL_DAYS` | no (30) | Lifetime of a sign-in session |
+| `GOOGLE_CLIENT_ID` | to enable Google | OAuth client id |
+| `GOOGLE_CLIENT_SECRET` | no | OAuth client secret (confidential clients) |
+| `GOOGLE_REDIRECT_URI` | no | OAuth callback URL |
+| `FRONTEND_URL` | no | Where sign-in sends the browser |
 | `NODE_ENV` | no | `production` enables the admin safety checks |
 
 **Frontend** (`frontend/.env.local`)
