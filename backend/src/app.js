@@ -4,7 +4,9 @@ import express from 'express'
 import { env } from './config/env.js'
 import { adminRequestsRouter } from './modules/adminRequests/index.js'
 import { authRouter } from './modules/auth/index.js'
+import { tutorProfileRouter } from './modules/tutorProfile/index.js'
 import { tutorRequestsRouter } from './modules/tutorRequests/index.js'
+import { tutorsRouter } from './modules/tutors/index.js'
 import { healthRouter } from './routes/health.js'
 
 /**
@@ -39,6 +41,8 @@ export function createApp() {
   app.use('/api/health', healthRouter)
   app.use('/api/auth', authRouter)
   app.use('/api/tutor-requests', tutorRequestsRouter)
+  app.use('/api/tutors', tutorsRouter)
+  app.use('/api/tutor-profile', tutorProfileRouter)
   // Admin surface. Not public: guarded by requireAdmin (see
   // src/middleware/adminAuth.js) and disabled in production unless
   // ADMIN_API_TOKEN is configured.

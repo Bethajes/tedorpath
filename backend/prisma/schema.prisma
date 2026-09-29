@@ -25,6 +25,28 @@ enum TutorRequestStatus {
   CANCELLED
 }
 
+/// Lifecycle state of a TutorProfile.
+enum ProfileStatus {
+  DRAFT
+  PENDING_REVIEW
+  APPROVED
+  SUSPENDED
+  REJECTED
+}
+
+/// Whether the admin team has verified a tutor's stated credentials.
+enum VerificationStatus {
+  UNVERIFIED
+  VERIFIED
+}
+
+/// The delivery method a tutor offers.
+enum TeachingMode {
+  ONLINE
+  IN_PERSON
+  BOTH
+}
+
 /// What a person may do in the product.
 ///
 /// `CLIENT` is the only role public registration can produce. `TUTOR` and
@@ -73,6 +95,7 @@ model User {
   accounts       Account[]
   sessions       Session[]
   tutorRequests  TutorRequest[]
+  tutorProfile   TutorProfile?
 
   @@map("users")
 }
@@ -162,6 +185,10 @@ model TutorRequest {
   userId String? @db.Uuid
   user   User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
 
+  // Optional link to a specific TutorProfile the client chose from the directory.
+  tutorProfileId String?       @db.Uuid
+  tutorProfile   TutorProfile? @relation(fields: [tutorProfileId], references: [id], onDelete: SetNull)
+
   // Contact details
   fullName         String
   phone            String
@@ -189,4 +216,68 @@ model TutorRequest {
   @@index([createdAt])
   @@index([userId])
   @@map("tutor_requests")
+}
+
+/// A topic a tutor can teach. Seeded from the SUBJECTS constant.
+model Subject {
+  id          String   @id @default(uuid()) @db.Uuid
+  name        String   @unique @db.VarChar(100)
+  slug        String   @unique @db.VarChar(100)
+  category    String   @db.VarChar(60)
+  description String?  @db.VarChar(300)
+  active      Boolean  @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tutorProfiles TutorProfileSubject[]
+
+  @@map("subjects")
+}
+
+/// A tutor's public-facing professional profile, linked one-to-one to a User.
+model TutorProfile {
+  id String @id @default(uuid()) @db.Uuid
+
+  userId String @unique @db.Uuid
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  displayName     String  @db.VarChar(100)
+  headline        String  @db.VarChar(160)
+  bio             String  @db.VarChar(2000)
+  location        String? @db.VarChar(120)
+  profilePhotoUrl String? @db.VarChar(2048)
+
+  teachingMode  TeachingMode
+  studentLevels String[]     // values from EDUCATION_LEVELS constant
+  languages     String[]     @default(["English"])
+  availability  String?      @db.VarChar(300)
+
+  hourlyRate Decimal? @db.Decimal(10, 2)
+  experience String?  @db.VarChar(2000)
+  education  String?  @db.VarChar(2000)
+
+  profileStatus      ProfileStatus      @default(DRAFT)
+  verificationStatus VerificationStatus @default(UNVERIFIED)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  subjects      TutorProfileSubject[]
+  tutorRequests TutorRequest[]
+
+  @@index([profileStatus])
+  @@index([createdAt])
+  @@map("tutor_profiles")
+}
+
+/// Join table for the TutorProfile ↔ Subject many-to-many relationship.
+model TutorProfileSubject {
+  tutorProfileId String       @db.Uuid
+  subjectId      String       @db.Uuid
+  tutorProfile   TutorProfile @relation(fields: [tutorProfileId], references: [id], onDelete: Cascade)
+  subject        Subject      @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+
+  @@id([tutorProfileId, subjectId])
+  @@map("tutor_profile_subjects")
 }
