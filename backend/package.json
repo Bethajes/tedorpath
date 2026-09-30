@@ -4,28 +4,36 @@
   "private": true,
   "type": "module",
   "main": "main.js",
+  "engines": {
+    "node": ">=20.19"
+  },
   "scripts": {
     "postinstall": "prisma generate",
     "dev": "node --watch main.js",
     "start": "node main.js",
-    "test": "node --test tests/*.test.mjs",
+    "test": "node --test --test-concurrency=1 tests/*.test.mjs",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate deploy",
     "db:migrate:dev": "prisma migrate dev",
     "db:status": "prisma migrate status",
+    "db:seed": "node prisma/seed.js",
     "db:studio": "prisma studio",
-    "setup": "prisma generate && prisma migrate deploy"
+    "setup": "prisma generate && prisma migrate deploy",
+    "auth:check": "node scripts/check-google-auth.mjs"
   },
   "dependencies": {
     "@prisma/adapter-pg": "^7.10.0",
     "@prisma/client": "^7.10.0",
+    "argon2": "^0.45.1",
     "cors": "^2.8.5",
     "dotenv": "^18.0.4",
     "express": "^5.1.0",
+    "multer": "^2.4.0",
     "pg": "^8.23.0",
     "zod": "^4.6.5"
   },
   "devDependencies": {
+    "fast-check": "^4.10.2",
     "prisma": "^7.10.0"
   }
 }

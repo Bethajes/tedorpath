@@ -11,6 +11,11 @@ import type { Subject } from '@/types/tutorRequest'
 export interface SubjectEntry {
   /** Matches a value in `SUBJECTS` exactly — this is what gets submitted. */
   subject: Subject
+  /**
+   * URL-safe slug matching the backend Subject record's `slug` column.
+   * Used to link subject cards into `/tutors?subject=<slug>`.
+   */
+  slug: string
   /** One short line explaining what a tutor can help with. */
   description: string
 }
@@ -30,22 +35,27 @@ export const SUBJECT_GROUPS: SubjectGroup[] = [
     subjects: [
       {
         subject: 'Mathematics',
+        slug: 'mathematics',
         description: 'Algebra, calculus, geometry and problem-solving technique.',
       },
       {
         subject: 'Physics',
+        slug: 'physics',
         description: 'Mechanics, electricity, waves and worked examples.',
       },
       {
         subject: 'Chemistry',
+        slug: 'chemistry',
         description: 'Reactions, bonding, quantities and lab concepts.',
       },
       {
         subject: 'Biology',
+        slug: 'biology',
         description: 'Cells, genetics, ecology and human biology.',
       },
       {
         subject: 'English',
+        slug: 'english',
         description: 'Essay writing, comprehension, grammar and analysis.',
       },
     ],
@@ -57,10 +67,12 @@ export const SUBJECT_GROUPS: SubjectGroup[] = [
     subjects: [
       {
         subject: 'Programming',
+        slug: 'programming',
         description: 'Python, JavaScript, algorithms and debugging.',
       },
       {
         subject: 'AI & Technology',
+        slug: 'ai-technology',
         description: 'Artificial intelligence, machine learning and modern tooling.',
       },
     ],
@@ -72,10 +84,12 @@ export const SUBJECT_GROUPS: SubjectGroup[] = [
     subjects: [
       {
         subject: 'University Course',
+        slug: 'university-course',
         description: 'Module-specific help with lectures, assignments and exams.',
       },
       {
         subject: 'Exam Preparation',
+        slug: 'exam-preparation',
         description: 'National, university and entrance exam preparation.',
       },
     ],
@@ -89,5 +103,6 @@ export const SUBJECT_GROUPS: SubjectGroup[] = [
  */
 export const OTHER_SUBJECT_ENTRY: SubjectEntry = {
   subject: 'Other',
+  slug: 'other',
   description: 'Tell us what you need and our team will look for the right tutor.',
 }

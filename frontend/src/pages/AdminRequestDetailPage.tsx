@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useNavigate, useParams, Link } from 'react-router-dom'
 
 import { AdminBackLink, AdminPageHeader, AdminShell } from '@/components/layout/AdminShell'
 import { Alert, Button, Select, Textarea } from '@/components/ui'
@@ -172,6 +172,41 @@ export function AdminRequestDetailPage() {
 
       {record ? (
         <div className="flex flex-col gap-5">
+          {/*
+            The chosen tutor leads the page, not a row in a table. When a client
+            picks a tutor from their profile they are asking for that person
+            specifically, so it decides who this request belongs to — an admin
+            reading a cold request and one reading a routed request need to make
+            different decisions, and the difference has to be the first thing
+            they see rather than a field further down. Requirement 13.1
+          */}
+          {record.tutor ? (
+            <div className="rounded-xl border border-brand-200 bg-brand-50/60 p-5">
+              <p className="text-sm font-semibold text-slate-900">
+                Requested tutor: {record.tutor.displayName}
+              </p>
+              <p className="mt-1 text-sm text-slate-700">{record.tutor.headline}</p>
+              <div className="mt-3 flex flex-wrap items-center gap-3">
+                <Link
+                  to={`/admin/tutors/${record.tutor.id}`}
+                  className="text-sm font-medium text-brand-700 hover:underline"
+                >
+                  Open their profile
+                </Link>
+                <span className="text-sm text-slate-600">
+                  Status: {record.tutor.profileStatus.replace(/_/g, ' ').toLowerCase()}
+                </span>
+              </div>
+            </div>
+          ) : (
+            <div className="rounded-xl border border-slate-200 bg-slate-50 p-5">
+              <p className="text-sm font-semibold text-slate-900">No tutor chosen</p>
+              <p className="mt-1 text-sm text-slate-600">
+                This request came from the general form, so it needs matching against the tutor
+                directory.
+              </p>
+            </div>
+          )}
           <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
             <DetailSection title="Client Information">
               <dl className="mt-2 divide-y divide-slate-100">

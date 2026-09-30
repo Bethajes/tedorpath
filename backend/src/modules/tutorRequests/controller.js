@@ -1,4 +1,4 @@
-import { createTutorRequest } from './service.js'
+import { TUTOR_PROFILE_NOT_FOUND, createTutorRequest } from './service.js'
 import { validateTutorRequest } from './validation.js'
 
 /**
@@ -22,13 +22,33 @@ export async function createTutorRequestHandler(req, res) {
   }
 
   try {
-    const { id } = await createTutorRequest(result.data)
+    // `req.user` is set by optionalAuth. It is null for an anonymous visitor,
+    // which is still a fully supported way to ask for a tutor — the form simply
+    // does not link the request to an account.
+    const { id } = await createTutorRequest(result.data, { userId: req.user?.id ?? null })
 
     res.status(201).json({
       success: true,
       data: { id },
     })
   } catch (error) {
+    // A tutorProfileId that names nothing is the client's mistake, not ours, so
+    // it is a validation failure like any other field. It is reported in the
+    // same shape as a schema error so the form can highlight the field.
+    if (error?.code === TUTOR_PROFILE_NOT_FOUND) {
+      res.status(400).json({
+        success: false,
+        error: {
+          code: 'VALIDATION_ERROR',
+          message: 'Invalid tutor request.',
+          fields: [
+            { field: 'tutorProfileId', message: 'The selected tutor profile does not exist.' },
+          ],
+        },
+      })
+      return
+    }
+
     // Log the real cause for operators, but never leak it to the client.
     console.error('[tutor-requests] failed to store request:', error)
 

@@ -65,6 +65,24 @@ export const tutorRequestSchema = z.object({
   preferredTime: optionalText(120, 'your preferred time'),
   budget: optionalText(80, 'your budget'),
   additionalInfo: optionalText(500, 'additional information'),
+
+  /**
+   * The tutor the client chose from a profile, as a TutorProfile id.
+   *
+   * Optional, because most people reach the form without a tutor in mind and
+   * must still be able to use it. The empty string is accepted here and dropped
+   * before the request is sent, so "no tutor chosen" has one representation
+   * inside the form instead of two.
+   *
+   * Carried rather than chosen in the form itself: a client who picked a tutor
+   * should not be able to change that decision by editing a dropdown, because
+   * the tutor is the thing being asked for, not a preference.
+   */
+  tutorProfileId: z
+    .string()
+    .uuid('Tutor profile must be a valid ID.')
+    .or(z.literal(''))
+    .optional(),
 })
 
 export type TutorRequestValues = z.input<typeof tutorRequestSchema>

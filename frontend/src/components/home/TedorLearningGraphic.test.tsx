@@ -47,11 +47,14 @@ describe('TedorLearningGraphic', () => {
     expect(screen.getByText('Learning that moves forward')).toBeInTheDocument()
   })
 
-  it('labels the three milestones on the path', () => {
+  it('numbers five milestones along the path', () => {
     const { container } = renderGraphic()
 
-    expect(container.querySelectorAll('.tj-milestone')).toHaveLength(3)
-    expect(container.querySelectorAll('.tj-path')).toHaveLength(1)
+    // Start → Learn → Practice → Master → Achieve. The numerals are permanent
+    // so the progression reads without hovering; the words are not.
+    expect(container.querySelectorAll('.tj-milestone')).toHaveLength(5)
+    expect(container.querySelectorAll('.tj-ms-index')).toHaveLength(5)
+    expect(container.querySelector('.tj-path')).not.toBeNull()
   })
 
   it('responds to the card being hovered', async () => {
@@ -72,7 +75,7 @@ describe('TedorLearningGraphic', () => {
 
     expect(container.querySelector<HTMLElement>('.tj-card')?.dataset.static).toBe('true')
     // The finished frame is still complete: path, milestones and arrow all present.
-    expect(container.querySelectorAll('.tj-milestone')).toHaveLength(3)
+    expect(container.querySelectorAll('.tj-milestone')).toHaveLength(5)
     expect(container.querySelector('.tj-arrow-float')).toBeInTheDocument()
   })
 })

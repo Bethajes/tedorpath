@@ -1,7 +1,6 @@
 import { Link } from 'react-router-dom'
 
 import { Container } from '@/components/layout/PageShell'
-import { buildTutorRequestHref } from '@/lib/tutorRequestQuery'
 
 import { SubjectIcon } from './SubjectIcon'
 import { OTHER_SUBJECT_ENTRY, SUBJECT_GROUPS, type SubjectEntry } from './subjectCatalog'
@@ -10,7 +9,7 @@ function SubjectLink({ entry }: { entry: SubjectEntry }) {
   return (
     <li>
       <Link
-        to={buildTutorRequestHref({ subject: entry.subject })}
+        to={`/tutors?subject=${entry.slug}`}
         className="group/subject flex items-start gap-3 rounded-lg border border-transparent p-3 -mx-3 transition-colors hover:border-ink-200 hover:bg-white hover:shadow-[0_6px_20px_-16px_rgba(18,26,36,0.5)]"
       >
         <span className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-white text-brand-700 ring-1 ring-brand-100 transition-colors group-hover/subject:bg-brand-600 group-hover/subject:text-white group-hover/subject:ring-brand-600">
@@ -81,7 +80,7 @@ export function SubjectGrid() {
                   {group.summary}
                 </p>
                 <Link
-                  to={buildTutorRequestHref()}
+                  to="/request-tutor"
                   className="mt-4 inline-flex items-center gap-1.5 text-sm font-medium text-brand-700 transition-colors hover:text-brand-800"
                 >
                   Request a tutor
@@ -124,7 +123,7 @@ export function SubjectGrid() {
             </div>
           </div>
           <Link
-            to={buildTutorRequestHref({ subject: OTHER_SUBJECT_ENTRY.subject })}
+            to="/request-tutor"
             className="inline-flex shrink-0 items-center justify-center rounded-lg border border-accent-300 bg-white px-4 py-2.5 text-sm font-medium text-accent-700 transition-colors hover:border-accent-400 hover:bg-accent-50"
           >
             Tell us what you need

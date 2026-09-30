@@ -160,10 +160,11 @@ export function TutorRequestForm() {
 
   /**
    * Preferences carried over from the homepage discovery panel and the subject
-   * cards. Parsed against the same enums the schema enforces, so a hand-edited
-   * URL cannot seed the form with a value it could not otherwise hold.
+   * cards, plus the tutor the client opened the form from. Parsed against the
+   * same enums the schema enforces, so a hand-edited URL cannot seed the form
+   * with a value it could not otherwise hold.
    */
-  const { subject, educationLevel, learningMode } = parseTutorRequestPrefill(
+  const { subject, educationLevel, learningMode, tutorProfileId } = parseTutorRequestPrefill(
     searchParams.toString(),
   )
 
@@ -175,6 +176,7 @@ export function TutorRequestForm() {
       subject,
       educationLevel,
       learningMode,
+      tutorProfileId,
     },
   })
 
@@ -184,7 +186,8 @@ export function TutorRequestForm() {
     if (subject) form.setValue('subject', subject)
     if (educationLevel) form.setValue('educationLevel', educationLevel)
     if (learningMode) form.setValue('learningMode', learningMode)
-  }, [form, subject, educationLevel, learningMode])
+    form.setValue('tutorProfileId', tutorProfileId)
+  }, [form, subject, educationLevel, learningMode, tutorProfileId])
 
   const {
     handleSubmit,
@@ -205,7 +208,15 @@ export function TutorRequestForm() {
     inFlight.current = true
     setSubmitError(null)
     try {
-      await submitTutorRequest(values)
+      // The schema accepts an empty string for "no tutor chosen"; the API wants
+      // the key absent or null, so the two representations are collapsed here
+      // rather than leaving the API to guess.
+      const payload =
+        values.tutorProfileId === ''
+          ? { ...values, tutorProfileId: undefined }
+          : values
+
+      await submitTutorRequest(payload)
       setSubmitted(true)
     } catch (error) {
       // The entered values are deliberately left in place so the visitor can

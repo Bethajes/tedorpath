@@ -26,14 +26,28 @@ function jsonResponse(body: unknown, status = 200) {
   })
 }
 
+const LIST_ITEM_ID = '11111111-1111-4111-8111-111111111111'
+const TUTOR_ID = 'a52b1a0f-03d2-48dc-8eca-8aa22f00a47c'
+
+/** The tutor a request was aimed at, as the admin API now returns it. */
+const requestedTutor = (overrides: Record<string, unknown> = {}) => ({
+  id: TUTOR_ID,
+  displayName: 'Zebedee Nightingale',
+  headline: 'Chemistry and physics',
+  profileStatus: 'APPROVED',
+  ...overrides,
+})
+
 const listItem = (overrides: Record<string, unknown> = {}) => ({
-  id: '11111111-1111-4111-8111-111111111111',
+  id: LIST_ITEM_ID,
   fullName: 'Abel Tesfaye',
   subject: 'Mathematics',
   educationLevel: 'University',
   learningMode: 'Online',
   status: 'NEW',
-  createdAt: '2026-09-27T10:00:00.000Z',
+  // Recent enough that the relative time renders as "N days ago" rather than
+  // falling back to the absolute date.
+  createdAt: '2026-09-29T10:00:00.000Z',
   ...overrides,
 })
 
@@ -53,6 +67,25 @@ const detailRecord = (overrides: Record<string, unknown> = {}) => ({
   ...overrides,
 })
 
+/**
+ * The stats envelope the dashboard expects.
+ *
+ * Includes `tutorApplications` because a response without it would silently drop
+ * the whole applications panel — and the panel existing is the point.
+ */
+function defaultStats(overrides: Record<string, unknown> = {}) {
+  return {
+    total: 3,
+    NEW: 1,
+    CONTACTED: 1,
+    IN_PROGRESS: 1,
+    COMPLETED: 0,
+    CANCELLED: 0,
+    tutorApplications: { total: 2, PENDING_REVIEW: 1, NEEDS_INFORMATION: 0, APPROVED: 1 },
+    ...overrides,
+  }
+}
+
 let fetchMock: ReturnType<typeof vi.fn>
 
 /** Routes a URL to a handler, so each test only declares what it cares about. */
@@ -70,10 +103,7 @@ function stubApi(routes: {
     if (url.pathname === '/api/admin/stats') {
       return routes.stats
         ? routes.stats()
-        : jsonResponse({
-            success: true,
-            data: { total: 3, NEW: 1, CONTACTED: 1, IN_PROGRESS: 1, COMPLETED: 0, CANCELLED: 0 },
-          })
+        : jsonResponse({ success: true, data: defaultStats() })
     }
 
     if (url.pathname === '/api/admin/tutor-requests' && method === 'GET') {
@@ -138,7 +168,19 @@ describe('AdminDashboardPage', () => {
 
   it('shows an empty state when there are no requests', async () => {
     stubApi({
-      stats: () => jsonResponse({ success: true, data: { total: 0, NEW: 0, CONTACTED: 0, IN_PROGRESS: 0, COMPLETED: 0, CANCELLED: 0 } }),
+      stats: () =>
+        jsonResponse({
+          success: true,
+          data: defaultStats({
+            total: 0,
+            NEW: 0,
+            CONTACTED: 0,
+            IN_PROGRESS: 0,
+            COMPLETED: 0,
+            CANCELLED: 0,
+            tutorApplications: { total: 0, PENDING_REVIEW: 0, NEEDS_INFORMATION: 0, APPROVED: 0 },
+          }),
+        }),
       list: () =>
         jsonResponse({
           success: true,
@@ -147,7 +189,7 @@ describe('AdminDashboardPage', () => {
     })
     renderAt(<AdminDashboardPage />, '/admin')
 
-    await waitFor(() => expect(screen.getByText('No tutor requests yet.')).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByText('No learner requests yet')).toBeInTheDocument())
   })
 
   it('shows an error state with a retry when loading fails', async () => {
@@ -165,13 +207,136 @@ describe('AdminDashboardPage', () => {
     expect(screen.getByRole('button', { name: 'Try again' })).toBeInTheDocument()
   })
 
-  it('lists recent requests with a status badge', async () => {
+  it('lists the latest requests with a status badge', async () => {
     stubApi({})
     renderAt(<AdminDashboardPage />, '/admin')
 
-    await waitFor(() => expect(screen.getByText('Recent requests')).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByText('Latest requests')).toBeInTheDocument())
     expect(screen.getByText('Abel Tesfaye')).toBeInTheDocument()
     expect(screen.getAllByText('NEW').length).toBeGreaterThan(0)
+  })
+
+  it('shows how long ago each request arrived, not just the date', async () => {
+    // Two requests dated the same day can be minutes apart, and "is this new?"
+    // is the question the queue exists to answer. An absolute date cannot answer it.
+    stubApi({})
+    renderAt(<AdminDashboardPage />, '/admin')
+
+    const row = (await screen.findByText('Abel Tesfaye')).closest('li')!
+    // "yesterday" and "today" are included because `Intl.RelativeTimeFormat`
+    // uses `numeric: 'auto'`, which renders ±1 day in words rather than
+    // "1 day ago". The fixture above is a fixed date, so this test used to pass
+    // only while it was less than 24 hours old and then failed on its own once
+    // the clock crossed midnight UTC — the product output was correct the whole
+    // time.
+    expect(within(row).getByText(/ago|just now|yesterday|today|2026/)).toBeInTheDocument()
+  })
+
+  it('tells the admin how many learner requests are waiting for a first reply', async () => {
+    // The whole point of the change: "someone sent a request" has to be
+    // answerable without reading the whole feed.
+    stubApi({})
+    renderAt(<AdminDashboardPage />, '/admin')
+
+    const section = (await screen.findByRole('heading', { name: 'Learner requests' })).closest(
+      'section',
+    )!
+    expect(within(section).getByText('1 waiting for a first reply')).toBeInTheDocument()
+    expect(
+      within(section).getByRole('link', { name: /see all new requests/i }),
+    ).toHaveAttribute('href', '/admin/requests?status=NEW')
+  })
+
+  it('lists each request once, linking straight to its detail page', async () => {
+    // A request appearing in both the attention panel and the feed would put the
+    // same row on screen twice; the panel carries counts, the feed carries rows.
+    stubApi({})
+    renderAt(<AdminDashboardPage />, '/admin')
+
+    const names = await screen.findAllByText('Abel Tesfaye')
+    expect(names).toHaveLength(1)
+    expect(screen.getByRole('link', { name: 'Abel Tesfaye' })).toHaveAttribute(
+      'href',
+      `/admin/requests/${LIST_ITEM_ID}`,
+    )
+  })
+
+  it('marks a request nobody has replied to yet', async () => {
+    stubApi({})
+    renderAt(<AdminDashboardPage />, '/admin')
+
+    const row = (await screen.findByRole('link', { name: 'Abel Tesfaye' })).closest('li')!
+    expect(within(row).getByText('NEW')).toBeInTheDocument()
+  })
+
+  it('shows both queues, so a waiting tutor application is not invisible', async () => {
+    // Regression: the applications panel existed on its own and was easy to miss;
+    // it now sits beside the learner requests.
+    stubApi({})
+    renderAt(<AdminDashboardPage />, '/admin')
+
+    expect(await screen.findByRole('heading', { name: 'Learner requests' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Tutor applications' })).toBeInTheDocument()
+    expect(screen.getByText('1 waiting for review')).toBeInTheDocument()
+  })
+
+  it('links the tutor queue straight to the pending-review slice', async () => {
+    stubApi({})
+    renderAt(<AdminDashboardPage />, '/admin')
+
+    const link = await screen.findByRole('link', { name: /start reviewing/i })
+    expect(link).toHaveAttribute('href', '/admin/tutors?status=PENDING_REVIEW')
+  })
+
+  it('says nothing is waiting when both queues are clear', async () => {
+    stubApi({
+      stats: () =>
+        jsonResponse({
+          success: true,
+          data: defaultStats({
+            NEW: 0,
+            tutorApplications: { total: 1, PENDING_REVIEW: 0, NEEDS_INFORMATION: 0, APPROVED: 1 },
+          }),
+        }),
+      list: () =>
+        jsonResponse({
+          success: true,
+          data: { items: [], pagination: { page: 1, limit: 20, total: 0, totalPages: 1 } },
+        }),
+    })
+    renderAt(<AdminDashboardPage />, '/admin')
+
+    expect(await screen.findByText('Nothing is waiting for you right now.')).toBeInTheDocument()
+  })
+
+  it('flags tutors who are waiting on documents the admin asked for', async () => {
+    // NEEDS_INFORMATION means the admin is the blocker, so it belongs on a
+    // dashboard that is asking what is waiting.
+    stubApi({
+      stats: () =>
+        jsonResponse({
+          success: true,
+          data: defaultStats({
+            tutorApplications: { total: 3, PENDING_REVIEW: 0, NEEDS_INFORMATION: 2, APPROVED: 1 },
+          }),
+        }),
+    })
+    renderAt(<AdminDashboardPage />, '/admin')
+
+    expect(await screen.findByText(/2 tutors are waiting on documents/)).toBeInTheDocument()
+  })
+
+  it('links each status count into the matching queue filter', async () => {
+    // A number an admin cannot act on is decoration; every card is a shortcut
+    // to the rows behind it.
+    stubApi({})
+    renderAt(<AdminDashboardPage />, '/admin')
+
+    const newCard = (await screen.findByText('New')).closest('a')!
+    expect(newCard).toHaveAttribute('href', '/admin/requests?status=NEW')
+
+    const completedCard = screen.getByText('Completed').closest('a')!
+    expect(completedCard).toHaveAttribute('href', '/admin/requests?status=COMPLETED')
   })
 })
 
@@ -567,5 +732,129 @@ describe('AdminRequestDetailPage', () => {
 
     await waitFor(() => expect(patches).toHaveLength(1))
     expect(Object.keys(patches[0]).sort()).toEqual(['adminNotes', 'status'])
+  })
+})
+
+// ---------------------------------------------------------------------------
+// The tutor a client chose (Requirement 13.1)
+// ---------------------------------------------------------------------------
+
+describe('the tutor a client chose (Requirement 13.1)', () => {
+  /** A list page with one routed request and one cold request. */
+  function stubMixedList() {
+    return {
+      list: () =>
+        jsonResponse({
+          success: true,
+          data: {
+            items: [
+              listItem({ tutorProfileId: TUTOR_ID, tutor: requestedTutor() }),
+              listItem({
+                id: '22222222-2222-4222-8222-222222222222',
+                fullName: 'Cold Request',
+                subject: 'Art',
+                tutorProfileId: null,
+                tutor: null,
+              }),
+            ],
+            pagination: { page: 1, limit: 20, total: 2, totalPages: 1 },
+          },
+        }),
+    }
+  }
+
+  /**
+   * Scoped to the table, because the queue renders a desktop table and a mobile
+   * card list and only CSS separates them. Both carry the same links, which is
+   * what keeps nothing hidden on a small screen.
+   */
+  async function desktopTable() {
+    const view = renderAt(<AdminRequestsPage />, '/admin/requests')
+
+    // Both presentations render the same rows, so wait for the data to land
+    // before reaching for the table — the query is synchronous and the list is
+    // still loading on the first pass.
+    await screen.findAllByText('Cold Request')
+
+    const table = view.container.querySelector('table')
+    if (!table) throw new Error('the queue rendered no table')
+    return table
+  }
+
+  it('names the chosen tutor in the request list, linked to their profile', async () => {
+    stubApi(stubMixedList())
+
+    const table = await desktopTable()
+    const link = within(table).getByRole('link', { name: 'Zebedee Nightingale' })
+    // An admin needs to go from "who asked for this" to "who is this" in one click.
+    expect(link).toHaveAttribute('href', `/admin/tutors/${TUTOR_ID}`)
+  })
+
+  it('shows a dash rather than a blank for a request with no tutor', async () => {
+    // A column of nothing is indistinguishable from a column that failed to
+    // load; a dash is visibly "not chosen".
+    stubApi(stubMixedList())
+
+    const table = await desktopTable()
+    const coldRow = within(table).getByText('Cold Request').closest('tr')!
+    expect(within(coldRow).getByText('—')).toBeInTheDocument()
+    expect(within(coldRow).queryByRole('link', { name: /Nightingale/ })).toBeNull()
+  })
+
+  it('leads the detail page with the chosen tutor', async () => {
+    stubApi({
+      detail: () =>
+        jsonResponse({ success: true, data: detailRecord({ tutorProfileId: TUTOR_ID, tutor: requestedTutor() }) }),
+    })
+    renderAt(<AdminRequestDetailPage />, `/admin/requests/${LIST_ITEM_ID}`)
+
+    expect(
+      await screen.findByText('Requested tutor: Zebedee Nightingale'),
+    ).toBeInTheDocument()
+    expect(screen.getByText('Chemistry and physics')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /open their profile/i })).toHaveAttribute(
+      'href',
+      `/admin/tutors/${TUTOR_ID}`,
+    )
+  })
+
+  it('says a request with no tutor needs matching instead of naming one', async () => {
+    // The two cases have to be visibly different: a routed request is already
+    // decided, a cold one is work.
+    stubApi({
+      detail: () =>
+        jsonResponse({ success: true, data: detailRecord({ tutorProfileId: null, tutor: null }) }),
+    })
+    renderAt(<AdminRequestDetailPage />, `/admin/requests/${LIST_ITEM_ID}`)
+
+    expect(await screen.findByText('No tutor chosen')).toBeInTheDocument()
+    expect(screen.getByText(/needs matching against the tutor directory/i)).toBeInTheDocument()
+    expect(screen.queryByText(/requested tutor:/i)).toBeNull()
+  })
+
+  it('shows the tutor on the dashboard row, without opening the request', async () => {
+    stubApi({ list: stubMixedList().list })
+    renderAt(<AdminDashboardPage />, '/admin')
+
+    // The dashboard is where an admin decides whether to open anything at all,
+    // so the routing fact has to be visible there.
+    const link = await screen.findByRole('link', { name: 'Zebedee Nightingale' })
+    expect(link).toHaveAttribute('href', `/admin/tutors/${TUTOR_ID}`)
+  })
+
+  it('mentions the tutor in the profile status, so a stale request is explainable', async () => {
+    stubApi({
+      detail: () =>
+        jsonResponse({
+          success: true,
+          data: detailRecord({
+            tutorProfileId: TUTOR_ID,
+            tutor: requestedTutor({ profileStatus: 'SUSPENDED' }),
+          }),
+        }),
+    })
+    renderAt(<AdminRequestDetailPage />, `/admin/requests/${LIST_ITEM_ID}`)
+
+    expect(await screen.findByText('Status: suspended')).toBeInTheDocument()
   })
 })

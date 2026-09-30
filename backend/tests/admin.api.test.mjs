@@ -22,6 +22,8 @@ let baseUrl
 
 /** Rows created by these tests, removed at the end. */
 let createdIds = []
+const createdProfileIds = []
+const createdUserIds = []
 
 before(async () => {
   if (!TOKEN) {
@@ -35,6 +37,13 @@ before(async () => {
 after(async () => {
   if (createdIds.length) {
     await prisma.tutorRequest.deleteMany({ where: { id: { in: createdIds } } })
+  }
+  // Profiles before users: the profile row is owned by the user row.
+  if (createdProfileIds.length) {
+    await prisma.tutorProfile.deleteMany({ where: { id: { in: createdProfileIds } } })
+  }
+  if (createdUserIds.length) {
+    await prisma.user.deleteMany({ where: { id: { in: createdUserIds } } })
   }
   await new Promise((resolve) => server.close(resolve))
   await closePrisma()
@@ -156,6 +165,115 @@ describe('security boundary', () => {
   })
 })
 
+/**
+ * Creates an approved tutor profile that requests can be aimed at.
+ *
+ * A request that names a tutor is the normal case for anyone who found a tutor
+ * in the directory rather than filling in the form cold, so the admin queue has
+ * to be able to say who it was aimed at.
+ */
+async function seedTutorProfile(displayName = 'Bethel Berihun') {
+  const user = await prisma.user.create({
+    data: { email: `admin-tutor-${crypto.randomUUID()}@test.local`, name: displayName },
+  })
+  createdUserIds.push(user.id)
+
+  const profile = await prisma.tutorProfile.create({
+    data: {
+      userId: user.id,
+      displayName,
+      headline: 'Chemistry and physics',
+      bio: 'Ten years teaching.',
+      teachingMode: 'BOTH',
+      studentLevels: ['High School'],
+      profileStatus: 'APPROVED',
+    },
+  })
+  createdProfileIds.push(profile.id)
+  return profile
+}
+
+describe('the tutor a client chose (Requirement 13.1)', () => {
+  it('names the chosen tutor on the request list', async () => {
+    const tutor = await seedTutorProfile('Zebedee Nightingale')
+    await seedRequest({ tutorProfileId: tutor.id, subject: 'Physics' })
+
+    const { status, body } = await api('/api/admin/tutor-requests?limit=100')
+    assert.equal(status, 200)
+
+    const request = body.data.items.find((item) => item.subject === 'Physics')
+    assert.ok(request, 'the seeded request must be listed')
+    assert.equal(request.tutorProfileId, tutor.id)
+    // The whole point: an admin triaging the queue can see who it is for
+    // without opening anything.
+    assert.equal(request.tutor.displayName, 'Zebedee Nightingale')
+    assert.equal(request.tutor.id, tutor.id)
+    assert.equal(request.tutor.profileStatus, 'APPROVED')
+  })
+
+  it('names the chosen tutor on the request detail', async () => {
+    const tutor = await seedTutorProfile('Amara Okonkwo')
+    const requestId = await seedRequest({ tutorProfileId: tutor.id, subject: 'Biology' })
+
+    const { status, body } = await api(`/api/admin/tutor-requests/${requestId}`)
+    assert.equal(status, 200)
+    assert.equal(body.data.tutor.displayName, 'Amara Okonkwo')
+    assert.equal(body.data.tutor.headline, 'Chemistry and physics')
+  })
+
+  it('reports tutor as null for a request nobody chose a tutor for', async () => {
+    const requestId = await seedRequest({ subject: 'Exam Preparation' })
+
+    const { body } = await api(`/api/admin/tutor-requests/${requestId}`)
+    assert.equal(body.data.tutor, null, 'a cold request must not claim a tutor')
+    assert.equal(body.data.tutorProfileId, null)
+  })
+
+  it('leaves the request readable when the chosen tutor is deleted', async () => {
+    // The relation is onDelete: SetNull, so a removed profile must not take the
+    // client's request — and the client's own contact details — with it.
+    const tutor = await seedTutorProfile('Doomed Profile')
+    const requestId = await seedRequest({ tutorProfileId: tutor.id, subject: 'University Course' })
+
+    // Deleting an already-removed id from the cleanup list is unnecessary: the
+    // deleteMany in after() is a no-op for a row that is already gone.
+    await prisma.tutorProfile.delete({ where: { id: tutor.id } })
+
+    const { status, body } = await api(`/api/admin/tutor-requests/${requestId}`)
+    assert.equal(status, 200)
+    assert.equal(body.data.tutor, null)
+    assert.equal(body.data.fullName, 'Abel Tesfaye', 'the request itself must survive')
+  })
+
+  it('finds a request by searching for the chosen tutor', async () => {
+    const tutor = await seedTutorProfile('Ravi Patel')
+    await seedRequest({ tutorProfileId: tutor.id, subject: 'AI & Technology' })
+    await seedRequest({ subject: 'Other' })
+
+    const { body } = await api('/api/admin/tutor-requests?limit=100&q=Ravi%20Patel')
+    const subjects = body.data.items.map((item) => item.subject)
+
+    assert.ok(subjects.includes('AI & Technology'), 'the tutor name must be searchable')
+    assert.ok(!subjects.includes('Other'), 'an unrelated request must not match')
+  })
+
+  it('does not lose the tutor when the status is updated', async () => {
+    // The status endpoint selects a different column set; the chosen tutor has
+    // to survive an admin marking it CONTACTED.
+    const tutor = await seedTutorProfile('Grace Hopper')
+    const requestId = await seedRequest({ tutorProfileId: tutor.id, subject: 'Programming' })
+
+    await api(`/api/admin/tutor-requests/${requestId}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ status: 'CONTACTED' }),
+    })
+
+    const { body } = await api(`/api/admin/tutor-requests/${requestId}`)
+    assert.equal(body.data.status, 'CONTACTED')
+    assert.equal(body.data.tutor.displayName, 'Grace Hopper')
+  })
+})
+
 describe('GET /api/admin/stats', () => {
   it('counts requests by status from the database', async () => {
     const before = (await api('/api/admin/stats')).body.data
@@ -180,6 +298,52 @@ describe('GET /api/admin/stats', () => {
 
     for (const key of ['total', 'NEW', 'CONTACTED', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED']) {
       assert.equal(typeof after[key], 'number', `${key} should be numeric`)
+    }
+  })
+
+  it('counts tutor applications separately from tutor requests', async () => {
+    // The regression this guards: a dashboard built only from TutorRequest shows
+    // all zeroes while a tutor is waiting for a decision, and the admin concludes
+    // nothing has arrived. A pending application has to be visible here.
+    // Snapshot before creating anything, so the delta measures this profile.
+    const before = (await api('/api/admin/stats')).body.data
+
+    const user = await prisma.user.create({
+      data: { email: `admin-stats-${crypto.randomUUID()}@test.local`, name: 'Stats Tutor' },
+    })
+    createdUserIds.push(user.id)
+    const profile = await prisma.tutorProfile.create({
+      data: {
+        userId: user.id,
+        displayName: 'Stats Tutor',
+        headline: 'Waiting to be reviewed',
+        bio: 'x',
+        teachingMode: 'ONLINE',
+        studentLevels: ['High School'],
+        profileStatus: 'PENDING_REVIEW',
+      },
+    })
+    createdProfileIds.push(profile.id)
+
+    const after = (await api('/api/admin/stats')).body.data
+
+    assert.equal(
+      after.tutorApplications.PENDING_REVIEW,
+      before.tutorApplications.PENDING_REVIEW + 1,
+      'a profile waiting for review must be counted',
+    )
+    assert.equal(
+      after.total,
+      before.total,
+      'an application is not a request: the request total must not move',
+    )
+
+    for (const key of ['total', 'PENDING_REVIEW', 'NEEDS_INFORMATION', 'APPROVED']) {
+      assert.equal(
+        typeof after.tutorApplications[key],
+        'number',
+        `tutorApplications.${key} should be numeric`,
+      )
     }
   })
 })

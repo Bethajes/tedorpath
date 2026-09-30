@@ -19,6 +19,11 @@ export default defineConfig({
       '/api': {
         target: process.env.VITE_DEV_API_TARGET ?? 'http://localhost:4000',
         changeOrigin: true,
+        // Forward the host and scheme the browser actually used, alongside the
+        // rewritten one. The OAuth callback has to be served from the same
+        // origin the app is served from — otherwise the session cookie is set
+        // for localhost:4000 and the app on localhost:5173 never sends it back.
+        xfwd: true,
       },
     },
     watch: {
@@ -36,5 +41,18 @@ export default defineConfig({
     globals: true,
     setupFiles: ['./src/test/setup.ts'],
     include: ['src/**/*.test.{ts,tsx}'],
+    // The property tests render a component 100 times inside a single test, and
+    // jsdom rendering is not fast. Test files run in parallel, so these tests
+    // pass in seconds on an idle machine and then fail purely because the suite
+    // was busy: the 5s default is far too small, and so was the 30s this used
+    // to allow once the suite grew past a dozen files.
+    //
+    // They must be allowed to finish rather than time out. A timed-out property
+    // test is worse than a slow one: its async loop keeps rendering into fresh
+    // containers after Testing Library's `cleanup` has run, so its abandoned
+    // DOM leaks into the next test and that one fails for an unrelated reason.
+    testTimeout: 180_000,
+    // Reported next to a timeout so a slow test is obvious in the output.
+    slowTestThreshold: 20_000,
   },
 })

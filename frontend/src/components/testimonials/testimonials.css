@@ -1,0 +1,214 @@
+/* ==========================================================================
+   The testimonial stream — two continuous rows of cards travelling in
+   opposite directions.
+
+   Plain CSS on purpose, for the same reason the hero graphic is: the section
+   should not ship an animation dependency, and a marquee is a transform on a
+   single element. Nothing here animates layout, width, top/left or opacity of
+   a box, so the whole thing stays on the compositor.
+
+   HOW THE LOOP IS SEAMLESS
+   -----------------------
+   The card list is rendered twice — once visible, once `aria-hidden` — as two
+   `.tw-set` blocks side by side inside one `.tw-track`. The track is animated
+   across exactly -50% of its own width, which is one set's width, so the frame
+   where the second copy has fully replaced the first is identical to the frame
+   it started on. There is no jump because there is no second keyframe.
+
+   The spacing between cards comes from the *trailing* padding on each set
+   rather than from a `gap` on the track. A track-level gap would add the same
+   space twice (once between the sets) and break the -50% arithmetic; trailing
+   padding makes the two sets exactly equal in width.
+
+   Structure this relies on, all of it in TestimonialRow.tsx:
+
+     .tw-row      overflow hidden, clips the cards so the page never scrolls
+     .tw-track    display flex, width max-content, the animated element
+     .tw-set      display flex, one copy of the list, trailing padding
+     .tw-card     the card, sized here rather than in Tailwind so the
+                  responsive widths and the reduced-motion override live in
+                  one place
+
+   Reduced motion: index.css already collapses durations for these users, which
+   on its own would just park the track at its end state. The block at the
+   bottom of this file instead removes the animation entirely and lays the cards
+   out as a static wrapped grid, so those visitors get a readable section rather
+   than a row of cards pushed off the left edge. It also drops the duplicate
+   copy, which would otherwise show every testimonial twice in that grid.
+   ========================================================================== */
+
+.tw-row {
+  position: relative;
+  overflow: hidden;
+  /* Vertical padding keeps the hover lift and the card shadow inside the clip. */
+  padding-block: 0.75rem;
+
+  /* Cards dissolve at both edges rather than being cut off, so the stream
+     reads as continuing past the viewport instead of stopping at it. */
+  -webkit-mask-image: linear-gradient(
+    to right,
+    transparent 0,
+    #000 5rem,
+    #000 calc(100% - 5rem),
+    transparent 100%
+  );
+  mask-image: linear-gradient(
+    to right,
+    transparent 0,
+    #000 5rem,
+    #000 calc(100% - 5rem),
+    transparent 100%
+  );
+}
+
+.tw-track {
+  display: flex;
+  width: max-content;
+  will-change: transform;
+  animation: tw-drift-left 46s linear infinite;
+}
+
+.tw-row[data-reverse='true'] .tw-track {
+  animation-name: tw-drift-right;
+  /* A different duration from the row above, so the two streams never fall into
+     a shared rhythm that reads as one mechanical loop. */
+  animation-duration: 38s;
+}
+
+/* A single hover over a row stops that row only, so the other keeps moving and
+   the section stays alive. `focus-within` is the keyboard equivalent: a card
+   cannot be focused today, but the pause must not depend on hover existing. */
+.tw-row:hover .tw-track,
+.tw-row:focus-within .tw-track {
+  animation-play-state: paused;
+}
+
+.tw-set {
+  display: flex;
+  gap: 1.25rem;
+  /* The inter-card gap, closing the row so the two sets line up exactly. */
+  padding-right: 1.25rem;
+}
+
+.tw-set > li {
+  display: flex;
+}
+
+/* --- Card sizing ----------------------------------------------------------
+   280px on small screens, growing to 380px on desktop: wide enough to hold a
+   two-sentence quote without the card becoming a slab of empty space. */
+.tw-card {
+  width: 280px;
+  height: 100%;
+}
+
+@media (min-width: 640px) {
+  .tw-card {
+    width: 320px;
+  }
+}
+
+@media (min-width: 1024px) {
+  .tw-card {
+    width: 380px;
+  }
+}
+
+/* One card's worth of hover, and no more: a 3px lift and a shadow that reads as
+   "lifted" rather than "glowing". The track keeps its own transform, so this is
+   the only transform in the section and the two cannot fight. */
+.tw-card {
+  transition:
+    transform 0.25s cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow 0.25s ease,
+    border-color 0.25s ease;
+}
+
+.tw-card:hover {
+  transform: translate3d(0, -3px, 0);
+  border-color: var(--color-ink-300);
+  box-shadow: 0 12px 28px -18px rgba(18, 26, 36, 0.4);
+}
+
+/* --- Keyframes ------------------------------------------------------------
+   Both directions travel exactly one set width, so the animation wraps without
+   a visible jump. `translate3d` rather than `translateX` to keep it on the
+   compositor. */
+
+@keyframes tw-drift-left {
+  from {
+    transform: translate3d(0, 0, 0);
+  }
+  to {
+    transform: translate3d(-50%, 0, 0);
+  }
+}
+
+@keyframes tw-drift-right {
+  from {
+    transform: translate3d(-50%, 0, 0);
+  }
+  to {
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+/* --- Reduced motion -------------------------------------------------------
+   Static, wrapped, and readable. This block is last so it wins on source order
+   against the width queries above, and the widths are restated on `.tw-set` as
+   well so a narrow screen still fills the row. */
+
+@media (prefers-reduced-motion: reduce) {
+  .tw-row {
+    overflow: visible;
+    /* No horizontal stream to soften at the edges. */
+    -webkit-mask-image: none;
+    mask-image: none;
+    padding-block: 0;
+  }
+
+  .tw-track {
+    display: block;
+    width: 100%;
+    will-change: auto;
+    animation: none !important;
+    transform: none !important;
+  }
+
+  /* The duplicate copy exists only to make the loop seamless. With no loop it
+     would render the whole section twice. */
+  .tw-set[aria-hidden='true'] {
+    display: none;
+  }
+
+  /*
+   * A grid rather than a wrapped flex row. `width: 100%` on the cards is not
+   * enough on its own here: their parent <li> is a flex item with no basis of
+   * its own, so "100%" resolves against a width the flex algorithm is still
+   * deciding, and the cards come out at whatever the content happened to need.
+   * Explicit auto-fill tracks give each card a real column instead.
+   *
+   * 280px is the same floor the streaming cards use, so nothing reflows to a
+   * width the moving version never showed.
+   */
+  .tw-set {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    align-items: stretch;
+    gap: 1.25rem;
+    width: 100%;
+    padding-right: 0;
+  }
+
+  .tw-track .tw-card {
+    width: 100%;
+    /* Fills the <li> through flexbox's default cross-axis stretch. An explicit
+       percentage height would be resolved against a stretched grid area, which
+       is the one thing here that behaves differently across engines. */
+    height: auto;
+  }
+
+  .tw-card:hover {
+    transform: none;
+  }
+}

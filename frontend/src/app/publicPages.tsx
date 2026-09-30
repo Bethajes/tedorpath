@@ -33,3 +33,31 @@ export const ContactPage = lazy(() =>
 export const NotFoundPage = lazy(() =>
   import('@/pages/NotFoundPage').then((m) => ({ default: m.NotFoundPage })),
 )
+
+// Authentication lives in features/auth (see frontend/src/features/auth), but
+// the pages are loaded here so the router keeps its single lazy-loading seam.
+export const LoginPage = lazy(() =>
+  import('@/features/auth/pages/LoginPage').then((m) => ({ default: m.LoginPage })),
+)
+
+export const RegisterPage = lazy(() =>
+  import('@/features/auth/pages/RegisterPage').then((m) => ({ default: m.RegisterPage })),
+)
+
+export const TutorDirectoryPage = lazy(() =>
+  import('@/features/tutors/TutorDirectoryPage').then((m) => ({ default: m.TutorDirectoryPage })),
+)
+
+export const TutorProfilePage = lazy(() =>
+  import('@/features/tutorProfile/TutorProfilePage').then((m) => ({ default: m.TutorProfilePage })),
+)
+
+export const TutorOnboardingPage = lazy(() =>
+  import('@/features/tutorOnboarding/TutorOnboardingPage').then((m) => ({ default: m.TutorOnboardingPage })),
+)
+
+export const TutorApplicationStatusPage = lazy(() =>
+  import('@/features/tutorOnboarding/TutorApplicationStatusPage').then((m) => ({
+    default: m.TutorApplicationStatusPage,
+  })),
+)

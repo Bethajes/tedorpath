@@ -35,6 +35,13 @@
   --color-accent-800: #933e10;
   --color-accent-900: #793512;
 
+  /* Announcement strip that sits above the header. Warm cream rather than the
+     orange accent so a long line of text stays comfortable to read. */
+  --color-notice-50: #fdf8e8;
+  --color-notice-200: #f0e0a4;
+  --color-notice-700: #6b5410;
+  --color-notice-800: #4a3a0b;
+
   /* Dark navy/charcoal used for headings and body copy. */
   --color-ink-50: #f6f8fa;
   --color-ink-100: #eceff3;
@@ -46,6 +53,11 @@
   --color-ink-700: #333d49;
   --color-ink-800: #1f2733;
   --color-ink-900: #121a24;
+
+  /* Deepest ink: the header/footer "chrome" band that frames the page, a
+     shade darker than ink-900 so it reads as a distinct surface rather than
+     as body copy. */
+  --color-ink-950: #0a0f16;
 
   --font-sans:
     ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue',

@@ -8,6 +8,50 @@ import { prisma } from '../../lib/prisma.js'
  * contact details that the table does not need.
  */
 
+/**
+ * The tutor a client picked, when they picked one.
+ *
+ * A request that came from a tutor's profile is aimed at that tutor, and an
+ * admin triaging the queue has to know that: it decides who the request should
+ * go to and whether it should go to them at all. Without it the queue showed
+ * only "Mathematics / High School" and the fact that someone had already chosen
+ * a tutor was invisible.
+ *
+ * `onDelete: SetNull` on the relation means a deleted profile leaves the request
+ * readable with a null tutor, so this has to tolerate the absent case rather
+ * than assume the join always resolves.
+ */
+const TUTOR_INCLUDE = {
+  select: {
+    id: true,
+    displayName: true,
+    headline: true,
+    profileStatus: true,
+  },
+}
+
+/**
+ * Flattens the joined profile into a `tutor` object or null.
+ *
+ * The raw `tutorProfile` key is dropped so the response shape is the same whether
+ * a request was aimed at a tutor or not — a client reading `request.tutor?.id`
+ * should not have to know which column it came from.
+ */
+function shapeTutor(request) {
+  const { tutorProfile, ...rest } = request
+  return {
+    ...rest,
+    tutor: tutorProfile
+      ? {
+          id: tutorProfile.id,
+          displayName: tutorProfile.displayName,
+          headline: tutorProfile.headline,
+          profileStatus: tutorProfile.profileStatus,
+        }
+      : null,
+  }
+}
+
 const LIST_COLUMNS = {
   id: true,
   fullName: true,
@@ -16,6 +60,9 @@ const LIST_COLUMNS = {
   learningMode: true,
   status: true,
   createdAt: true,
+  // Which tutor the client chose, if any. Requirement 13.1
+  tutorProfileId: true,
+  tutorProfile: TUTOR_INCLUDE,
 }
 
 const DETAIL_COLUMNS = {
@@ -37,6 +84,10 @@ const DETAIL_COLUMNS = {
   adminNotes: true,
   createdAt: true,
   updatedAt: true,
+  // The chosen tutor, named on the detail view so an admin can route the
+  // request without opening the tutor's profile first. Requirement 13.1
+  tutorProfileId: true,
+  tutorProfile: TUTOR_INCLUDE,
 }
 
 /** Case-insensitive "contains" across the searchable client/subject columns. */
@@ -49,6 +100,10 @@ function searchFilter(term) {
       { email: { contains: term, mode: 'insensitive' } },
       { telegramUsername: { contains: term, mode: 'insensitive' } },
       { subject: { contains: term, mode: 'insensitive' } },
+      // The chosen tutor's name. An admin asked "what did Bethel get asked for?"
+      // should find it by typing "Bethel", not by reading every row looking for
+      // a tutor they have to recognise from a column they cannot see.
+      { tutorProfile: { displayName: { contains: term, mode: 'insensitive' } } },
     ],
   }
 }
@@ -72,7 +127,7 @@ export async function listTutorRequests({ page, limit, status, search }) {
   ])
 
   return {
-    items,
+    items: items.map(shapeTutor),
     pagination: {
       page,
       limit,
@@ -82,15 +137,27 @@ export async function listTutorRequests({ page, limit, status, search }) {
   }
 }
 
-/** Counts per status, computed from the database. */
+/**
+ * Counts per status, computed from the database.
+ *
+ * `tutorApplications` is the one number here that is not about requests. It
+ * exists because a tutor application waiting for review is invisible on a
+ * dashboard built only from `TutorRequest`: an admin sees a wall of zeroes and
+ * concludes nothing has arrived, when in fact someone is waiting on them. The
+ * tutor-facing statuses are counted separately and never mixed into `total`.
+ */
 export async function getRequestStats() {
-  const [total, grouped] = await Promise.all([
+  const [total, grouped, tutorApplications] = await Promise.all([
     prisma.tutorRequest.count(),
     prisma.tutorRequest.groupBy({ by: ['status'], _count: { _all: true } }),
+    prisma.tutorProfile.groupBy({ by: ['profileStatus'], _count: { _all: true } }),
   ])
 
   const byStatus = Object.fromEntries(
     grouped.map((row) => [row.status, row._count._all]),
+  )
+  const byProfileStatus = Object.fromEntries(
+    tutorApplications.map((row) => [row.profileStatus, row._count._all]),
   )
 
   return {
@@ -100,11 +167,22 @@ export async function getRequestStats() {
     IN_PROGRESS: byStatus.IN_PROGRESS ?? 0,
     COMPLETED: byStatus.COMPLETED ?? 0,
     CANCELLED: byStatus.CANCELLED ?? 0,
+    tutorApplications: {
+      total: tutorApplications.reduce((sum, row) => sum + row._count._all, 0),
+      PENDING_REVIEW: byProfileStatus.PENDING_REVIEW ?? 0,
+      NEEDS_INFORMATION: byProfileStatus.NEEDS_INFORMATION ?? 0,
+      APPROVED: byProfileStatus.APPROVED ?? 0,
+    },
   }
 }
 
 export async function getTutorRequest(id) {
-  return prisma.tutorRequest.findUnique({ where: { id }, select: DETAIL_COLUMNS })
+  const request = await prisma.tutorRequest.findUnique({
+    where: { id },
+    select: DETAIL_COLUMNS,
+  })
+
+  return request ? shapeTutor(request) : null
 }
 
 /** Applies only the fields the admin is allowed to change. */

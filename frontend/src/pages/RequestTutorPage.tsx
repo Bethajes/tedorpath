@@ -1,14 +1,78 @@
-import { useSearchParams } from 'react-router-dom'
+import { useEffect, useState } from 'react'
+import { Link, useSearchParams } from 'react-router-dom'
 
 import { Container, PageShell } from '@/components/layout/PageShell'
 import { TutorRequestForm } from '@/features/tutorRequest/TutorRequestForm'
+import { getTutor } from '@/features/tutors/tutors.api'
+import type { TutorDetailDTO } from '@/features/tutors/tutors.types'
 import { parseTutorRequestPrefill } from '@/lib/tutorRequestQuery'
+
+/**
+ * How the chosen tutor is being resolved, so the panel below knows what to say.
+ *
+ * `loading` is not an error state: a tutor whose page is slow to load should not
+ * show the visitor a warning about the tutor they just chose. Only a confirmed
+ * failure becomes `unavailable`, and even then the request is still submitted
+ * with the id — the tutor is real, the admin just cannot show a name for them
+ * right now.
+ */
+type TutorState =
+  | { kind: 'none' }
+  | { kind: 'loading' }
+  | { kind: 'ready'; tutor: TutorDetailDTO }
+  | { kind: 'unavailable' }
+
+/** The outcome of a fetch, tagged with the id it was for. */
+interface TutorResolution {
+  forId: string
+  state: Exclude<TutorState, { kind: 'loading' }>
+}
 
 export function RequestTutorPage() {
   const [searchParams] = useSearchParams()
-  const { subject, educationLevel, learningMode } = parseTutorRequestPrefill(
-    searchParams.toString(),
-  )
+  const { subject, educationLevel, learningMode, tutorProfileId } =
+    parseTutorRequestPrefill(searchParams.toString())
+
+  const [resolution, setResolution] = useState<TutorResolution | null>(null)
+
+  useEffect(() => {
+    if (!tutorProfileId) return
+
+    let cancelled = false
+
+    getTutor(tutorProfileId)
+      .then((tutor) => {
+        if (!cancelled) setResolution({ forId: tutorProfileId, state: { kind: 'ready', tutor } })
+      })
+      .catch(() => {
+        // A 404 here means the profile is no longer public — suspended, rejected
+        // or deleted. The request can still be sent: the admin decides who ends
+        // up teaching the client, and silently dropping the tutor would be a
+        // worse answer than saying the name is unavailable.
+        if (!cancelled) {
+          setResolution({ forId: tutorProfileId, state: { kind: 'unavailable' } })
+        }
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [tutorProfileId])
+
+  /*
+   * Derived during render rather than reset in an effect.
+   *
+   * Writing "loading" from the effect would mean a moment — between the id
+   * changing and the fetch resolving — where the panel still showed the
+   * *previous* tutor's name, so a visitor who followed two profiles in a row
+   * could be told they were requesting the wrong person. Deriving it from the
+   * id makes that state unreachable.
+   */
+  const tutorState: TutorState = !tutorProfileId
+    ? { kind: 'none' }
+    : resolution?.forId === tutorProfileId
+      ? resolution.state
+      : { kind: 'loading' }
 
   const carriedOver: { label: string; value: string }[] = []
   if (subject) carriedOver.push({ label: 'Subject', value: subject })
@@ -27,6 +91,52 @@ export function RequestTutorPage() {
             takes about two minutes, and only the fields marked with{' '}
             <span className="text-red-600">*</span> are required.
           </p>
+
+          {/*
+            Named prominently, and not editable. A client who came from a tutor's
+            profile has already chosen who they want; letting the choice look
+            like another dropdown would invite them to change the thing that
+            matters most about the request.
+          */}
+          {tutorState.kind === 'ready' ? (
+            <div className="mt-6 rounded-2xl border border-brand-200 bg-brand-50/60 p-5">
+              <p className="text-sm font-semibold text-ink-900">
+                You are requesting {tutorState.tutor.displayName}
+              </p>
+              <p className="mt-1 text-sm text-ink-600">
+                {tutorState.tutor.headline}
+                {tutorState.tutor.hourlyRate !== null
+                  ? ` · ${tutorState.tutor.hourlyRate} per hour`
+                  : ''}
+              </p>
+              <Link
+                to={`/tutors/${tutorState.tutor.id}`}
+                className="mt-3 inline-block text-sm font-medium text-brand-700 hover:underline"
+              >
+                View their profile
+              </Link>
+            </div>
+          ) : null}
+
+          {tutorState.kind === 'loading' ? (
+            <p
+              role="status"
+              className="mt-6 rounded-2xl border border-ink-200 bg-ink-50 p-5 text-sm text-ink-600"
+            >
+              Loading the tutor you selected…
+            </p>
+          ) : null}
+
+          {tutorState.kind === 'unavailable' ? (
+            <div className="mt-6 rounded-2xl border border-amber-200 bg-amber-50 p-5">
+              <p className="text-sm font-semibold text-amber-900">
+                The tutor you selected is no longer available
+              </p>
+              <p className="mt-1 text-sm text-amber-900">
+                Your request will still be sent and our team will find you a suitable tutor.
+              </p>
+            </div>
+          ) : null}
 
           {carriedOver.length > 0 ? (
             <div className="mt-6 rounded-2xl border border-brand-200 bg-brand-50/60 p-5">

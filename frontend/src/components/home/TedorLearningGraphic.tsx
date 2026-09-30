@@ -50,15 +50,25 @@ const JOURNEY_DELAY_MS = 2100
 const PATH_D = 'M88 232C158 232 184 200 214 166C238 140 246 128 252 116'
 
 /**
- * Milestone markers at 26%, 54% and 82% of the path's arc length — evenly
- * spaced markers need arc length, not the bezier parameter. The label
- * coordinates are placed by hand so each one sits on the empty side of the
- * path, clear of the path itself and of the floating icons.
+ * Milestone markers at roughly 10%, 32%, 54%, 76% and 92% of the path's arc
+ * length. Evenly spaced markers need arc length, not the bezier parameter, so
+ * the coordinates below were sampled off the path rather than guessed.
+ *
+ * The label coordinates are placed by hand so each one sits on the empty side of
+ * the path, clear of the path itself and of the floating icons. They alternate
+ * sides for the same reason: with five markers on a 358px-wide scene, two labels
+ * on the same side would overlap the moment both were revealed.
+ *
+ * The number inside each marker is the one thing always visible. The word is
+ * hover-revealed, so the diagram reads as a numbered progression at a glance and
+ * only explains itself on interaction.
  */
 const MILESTONES = [
-  { x: 142, y: 223.6, stage: 'Learn', detail: 'Build your foundation', anchor: 'start', lx: 150, ly: 246 },
-  { x: 190.9, y: 191.2, stage: 'Practice', detail: 'Sharpen what you know', anchor: 'end', lx: 180, ly: 160 },
-  { x: 230.6, y: 147.3, stage: 'Grow', detail: 'See your progress', anchor: 'start', lx: 242, ly: 158 },
+  { x: 107.7, y: 231.1, stage: 'Start', detail: 'Say what you need', anchor: 'end', lx: 100, ly: 248 },
+  { x: 166.0, y: 211.8, stage: 'Learn', detail: 'Build your foundation', anchor: 'start', lx: 176, ly: 234 },
+  { x: 191.5, y: 190.6, stage: 'Practice', detail: 'Sharpen what you know', anchor: 'start', lx: 202, ly: 180 },
+  { x: 229.2, y: 148.9, stage: 'Master', detail: 'Work it until it holds', anchor: 'end', lx: 220, ly: 138 },
+  { x: 243.5, y: 127.0, stage: 'Achieve', detail: 'Move toward your goal', anchor: 'end', lx: 236, ly: 112 },
 ] as const
 
 /** 24×24 line icons — no icon dependency, and no emoji. */
@@ -73,6 +83,19 @@ const ICONS = {
     'M4 4.5h5.5a3 3 0 0 1 3 3v12a2.5 2.5 0 0 0-2.5-2.5H4Z',
     'M20 4.5h-5.5a3 3 0 0 0-3 3v12a2.5 2.5 0 0 1 2.5-2.5H20Z',
   ],
+  globe: [
+    'M12 3.2a8.8 8.8 0 1 0 0 17.6 8.8 8.8 0 0 0 0-17.6Z',
+    'M3.4 12h17.2',
+    'M12 3.2c2.3 2.3 3.5 5.3 3.5 8.8S14.3 18.5 12 20.8c-2.3-2.3-3.5-5.3-3.5-8.8S9.7 5.5 12 3.2Z',
+  ],
+  laptop: [
+    'M5 5.5h14v9.5H5z',
+    'M2.5 18.5h19',
+  ],
+  chat: [
+    'M20.5 12c0 3.6-3.8 6.5-8.5 6.5-1 0-2-.14-2.9-.4L4.5 19.5l1.3-3.3A6.2 6.2 0 0 1 3.5 12c0-3.6 3.8-6.5 8.5-6.5s8.5 2.9 8.5 6.5Z',
+    'M9 11.8h6M12 8.8v6',
+  ],
 } as const
 
 /** Scene size, trimmed to the content so nothing floats in dead space. */
@@ -81,9 +104,9 @@ const SCENE_HEIGHT = 292
 
 /** Long description of the graphic for assistive technology. */
 const SCENE_LABEL =
-  'A learning journey: a blue path leaves a starting point and rises through three milestones — ' +
-  'Learn, Practice, Grow — ending in the orange upward arrow from the Tedor logo. A moving point ' +
-  'travels the path from the start to the arrow.'
+  'A learning journey: a blue path leaves a starting point and rises through five numbered ' +
+  'milestones — 1 Start, 2 Learn, 3 Practice, 4 Master, 5 Achieve — ending in the orange ' +
+  'upward arrow from the Tedor logo. A moving point travels the path from the start to the arrow.'
 
 interface SampledPath {
   xs: Float32Array
@@ -208,16 +231,43 @@ function ProgressPoint({ dotRef, particlesRef }: { dotRef: RefObject<SVGGElement
 }
 
 /**
- * Milestone markers on the path, with their labels revealed on hover. The hit
- * area is deliberately larger than the marker so the label is easy to find.
+ * Milestone markers on the path.
+ *
+ * The number is permanent and the word is hover-revealed. Five always-visible
+ * words would need a type size this scene cannot afford — the card is 358 units
+ * wide and rendered at roughly 450px, so a legible label is already small enough
+ * that five of them would collide with the path and the floating icons. The
+ * numbers give the progression away at a glance and the hover gives it a name.
+ *
+ * The hit area is deliberately much larger than the marker so the label is easy
+ * to find, and it is a filled circle rather than a stroked one so the pointer
+ * still registers over the numerals.
  */
 function Milestones() {
   return (
     <g aria-hidden="true">
       {MILESTONES.map((milestone, index) => (
         <g key={milestone.stage} className="tj-milestone">
-          <circle className={`tj-milestone-pulse${index ? ` tj-milestone-pulse--${index + 1}` : ''}`} cx={milestone.x} cy={milestone.y} r={5} />
-          <circle className="tj-milestone-dot" cx={milestone.x} cy={milestone.y} r={4.5} />
+          <circle
+            className={`tj-milestone-pulse${index ? ` tj-milestone-pulse--${index + 1}` : ''}`}
+            cx={milestone.x}
+            cy={milestone.y}
+            r={6}
+          />
+          <circle
+            className="tj-milestone-num"
+            cx={milestone.x}
+            cy={milestone.y}
+            r={9}
+          />
+          <text
+            className="tj-ms-index"
+            x={milestone.x}
+            y={milestone.y + 2.9}
+            textAnchor="middle"
+          >
+            {String(index + 1).padStart(2, '0')}
+          </text>
           <circle className="tj-milestone-hit" cx={milestone.x} cy={milestone.y} r={15} />
           <g className="tj-milestone-label" textAnchor={milestone.anchor}>
             <text className="tj-ms-stage" x={milestone.lx} y={milestone.ly}>
@@ -252,7 +302,19 @@ function GrowthArrow() {
   )
 }
 
-/** Four faint symbols of learning, each floating on its own rhythm. */
+/**
+ * Seven faint symbols of learning, each floating on its own rhythm.
+ *
+ * Seven rather than the eight the concept called for, because they share one
+ * 358-unit scene with the path, five numbered milestones and the arrow. Past
+ * seven the field stops reading as a quiet background and starts competing with
+ * the journey, which is the thing the graphic exists to draw. Three of them are
+ * dropped entirely on small screens (see the stylesheet), where the scene is too
+ * short to carry them.
+ *
+ * Positions are chosen for the gaps the path leaves: above it, below it, and in
+ * the two lower corners. Nothing sits on the curve.
+ */
 function LearningIcons() {
   return (
     <g aria-hidden="true">
@@ -278,6 +340,27 @@ function LearningIcons() {
       <g className="tj-icon tj-icon--d" transform="translate(298 240)">
         <g className="tj-float">
           {ICONS.book.map((d) => (
+            <path key={d} d={d} />
+          ))}
+        </g>
+      </g>
+      <g className="tj-icon tj-icon--e" transform="translate(238 34)">
+        <g className="tj-float">
+          {ICONS.globe.map((d) => (
+            <path key={d} d={d} />
+          ))}
+        </g>
+      </g>
+      <g className="tj-icon tj-icon--f" transform="translate(44 104)">
+        <g className="tj-float">
+          {ICONS.laptop.map((d) => (
+            <path key={d} d={d} />
+          ))}
+        </g>
+      </g>
+      <g className="tj-icon tj-icon--g" transform="translate(46 168)">
+        <g className="tj-float">
+          {ICONS.chat.map((d) => (
             <path key={d} d={d} />
           ))}
         </g>
@@ -504,12 +587,23 @@ export function TedorLearningGraphic({ parallaxHost, className }: TedorLearningG
 
         <div className="px-6 pb-6 pt-1 sm:px-7 sm:pb-7">
           <p className="text-[0.95rem] font-medium text-ink-700">Learning that moves forward</p>
-          <p className="tj-meta mt-2.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-[0.68rem] font-semibold uppercase tracking-[0.16em] text-brand-700">
-            <span>Learn</span>
-            <span aria-hidden="true" className="h-px w-4 bg-brand-200" />
-            <span>Practice</span>
-            <span aria-hidden="true" className="h-px w-4 bg-brand-200" />
-            <span>Grow</span>
+          {/*
+            Mirrors the five markers on the path, in the same order and with the
+            same numbers, so the caption reads as a legend for the graphic above
+            it rather than as a separate claim. When the milestones were three,
+            this was Learn — Practice — Grow; leaving it there would have put two
+            different vocabularies about the same journey on one card.
+          */}
+          <p className="tj-meta mt-2.5 flex flex-wrap items-center gap-x-1.5 gap-y-1 text-[0.62rem] font-semibold uppercase tracking-[0.12em] text-brand-700">
+            {MILESTONES.map((milestone, index) => (
+              <span key={milestone.stage} className="flex items-center gap-x-1.5">
+                {index > 0 ? (
+                  <span aria-hidden="true" className="h-px w-2.5 bg-brand-200" />
+                ) : null}
+                <span className="text-brand-400">{String(index + 1).padStart(2, '0')}</span>
+                {milestone.stage}
+              </span>
+            ))}
           </p>
         </div>
       </div>

@@ -1,0 +1,42 @@
+/* ==========================================================================
+   The matching bridge — thin lines running from learner goals through the
+   Tedor node out to tutors.
+
+   The dash pattern is the only animation, and it is deliberately slow (18s) and
+   small: a dash drifting along a hairline reads as traffic moving through a
+   connection, where anything faster reads as a loading spinner and undercuts
+   the "nothing here is automated" promise the copy is making two inches away.
+
+   `offset-path` is avoided on purpose. Animating a `d` attribute or measuring
+   node positions would mean JavaScript and a ResizeObserver; `stroke-dashoffset`
+   on a fixed path is compositor-cheap and needs neither.
+
+   Reduced motion: index.css already collapses durations globally, and the
+   explicit block below stops it entirely so the lines render as a still
+   diagram — which is the more useful thing to see anyway.
+   ========================================================================== */
+
+.ltc-lines .ltc-flow {
+  animation: ltc-flow 18s linear infinite;
+}
+
+.ltc-lines .ltc-flow:nth-of-type(2n) {
+  /* Staggered, not synchronised. Every line pulsing in lockstep would draw
+     attention to the fact that they are all the same animation. */
+  animation-delay: -4.5s;
+}
+
+@keyframes ltc-flow {
+  from {
+    stroke-dashoffset: 24;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ltc-lines .ltc-flow {
+    animation: none;
+  }
+}
