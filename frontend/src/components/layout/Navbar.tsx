@@ -152,7 +152,7 @@ export function Navbar() {
           <nav aria-label="Main" className="hidden items-center gap-1 lg:flex">
             {NAV_ITEMS.map((item) => (
               <Link
-                key={item.to}
+                key={item.key ?? item.to}
                 to={item.to}
                 aria-current={isCurrent(item) ? 'page' : undefined}
                 className={cn(
@@ -236,7 +236,7 @@ export function Navbar() {
         >
           <ul className="mx-auto flex w-full max-w-7xl flex-col gap-1 px-5 py-4 sm:px-8">
             {NAV_ITEMS.map((item) => (
-              <li key={item.to}>
+              <li key={item.key ?? item.to}>
                 <Link
                   to={item.to}
                   onClick={closeMenu}

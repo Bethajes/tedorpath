@@ -294,13 +294,19 @@ describe('HomePage — section order', () => {
 
     // Derived from the rendered chrome rather than hardcoded, so removing a
     // section and forgetting the link that pointed at it fails here instead of
-    // shipping a link that scrolls nowhere.
-    const anchors = Array.from(container.querySelectorAll('header a[href^="#"], footer a[href^="#"]'))
+    // shipping a link that scrolls nowhere. Both forms count: "/#x" from the
+    // navbar/footer, "#x" from a link already on the page.
+    const links = Array.from(container.querySelectorAll('a[href]'))
       .map((link) => link.getAttribute('href') ?? '')
-      .filter((href) => href.startsWith('#') && href.length > 1)
+      .filter((href) => href.length > 1)
+      .flatMap((href) => {
+        const target = href.includes('#') ? href.slice(href.indexOf('#')) : ''
+        // An empty target is a link to the current page, not a dead anchor.
+        return target.length > 1 ? [target] : []
+      })
 
-    expect(anchors.length).toBeGreaterThan(0)
-    for (const anchor of anchors) {
+    expect(links.length).toBeGreaterThan(0)
+    for (const anchor of links) {
       expect(container.querySelector(anchor), `no target for ${anchor}`).not.toBeNull()
     }
 
@@ -313,7 +319,9 @@ describe('HomePage — section order', () => {
     const { container } = renderHomePage()
 
     expect(container.querySelector('#subjects')).toBeNull()
-    expect(screen.queryByRole('heading', { name: /what do you want to learn/i })).toBeNull()
+    // The hero's search card keeps its own "What do you want to learn?"
+    // heading, so the section is identified by the copy only it had.
+    expect(screen.queryByText(/find support across school subjects/i)).toBeNull()
 
     // A dangling '/#subjects' would still resolve as a valid route, so it has
     // to be checked as a string.
