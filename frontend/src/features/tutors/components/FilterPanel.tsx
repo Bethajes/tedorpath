@@ -92,6 +92,10 @@ export function FilterPanel({ filters, onChange, isOpen = false, onClose }: Filt
     update('location', e.target.value || undefined)
   }
 
+  function handleLanguageChange(e: ChangeEvent<HTMLInputElement>) {
+    update('language', e.target.value || undefined)
+  }
+
   function handleMinRateChange(e: ChangeEvent<HTMLInputElement>) {
     const raw = e.target.value
     update('minRate', raw === '' ? undefined : Number(raw))
@@ -111,6 +115,7 @@ export function FilterPanel({ filters, onChange, isOpen = false, onClose }: Filt
     Boolean(filters.studentLevel) ||
     Boolean(filters.mode) ||
     Boolean(filters.location) ||
+    Boolean(filters.language) ||
     filters.minRate !== undefined ||
     filters.maxRate !== undefined
 
@@ -213,6 +218,25 @@ export function FilterPanel({ filters, onChange, isOpen = false, onClose }: Filt
             onChange={handleLocationChange}
             placeholder="City or area"
             aria-label="Filter by location"
+          />
+        )}
+      </Field>
+
+      {/* Teaching language */}
+      <Field
+        id="filter-language"
+        label="Language"
+        hint="Matches any language a tutor lists, ignoring capitalisation."
+      >
+        {(fieldProps) => (
+          <Input
+            {...fieldProps}
+            type="text"
+            value={filters.language ?? ''}
+            onChange={handleLanguageChange}
+            placeholder="e.g. English"
+            autoComplete="off"
+            aria-label="Filter by language"
           />
         )}
       </Field>

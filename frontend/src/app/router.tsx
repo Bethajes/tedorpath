@@ -7,6 +7,8 @@ import {
   AdminLoginPage,
   AdminRequestDetailPage,
   AdminRequestsPage,
+  AdminTutorReviewPage,
+  AdminTutorsPage,
 } from '@/app/adminPages'
 import { RequireAdminToken } from '@/app/RequireAdminToken'
 import {
@@ -18,6 +20,7 @@ import {
   PageFallback,
   RegisterPage,
   RequestTutorPage,
+  TutorApplicationStatusPage,
   TutorDirectoryPage,
   TutorOnboardingPage,
   TutorProfilePage,
@@ -46,6 +49,11 @@ export const router = createBrowserRouter([
   // Tutor onboarding — auth-gated (Requirement 11.1)
   { path: '/become-a-tutor', element: <TutorOnboardingPage /> },
 
+  // Where an applicant's application has got to. Auth-gated in-component for
+  // the same reason as the wizard: it reads the applicant's own profile, so
+  // there is nothing to show an anonymous visitor. Requirement 21.1
+  { path: '/tutor/application-status', element: <TutorApplicationStatusPage /> },
+
   // Authentication. Public: signing in must never be behind a login. These
   // pages redirect away if a session already exists, and the guard
   // (features/auth/RequireAuth) is ready for the first private screen.
@@ -66,6 +74,10 @@ export const router = createBrowserRouter([
   { path: '/admin', element: admin(<AdminDashboardPage />) },
   { path: '/admin/requests', element: admin(<AdminRequestsPage />) },
   { path: '/admin/requests/:id', element: admin(<AdminRequestDetailPage />) },
+  // Tutor moderation queue and the per-profile review workspace.
+  // Requirements: 23.1, 24.1
+  { path: '/admin/tutors', element: admin(<AdminTutorsPage />) },
+  { path: '/admin/tutors/:id', element: admin(<AdminTutorReviewPage />) },
 
   { path: '*', element: <NotFoundPage /> },
 ])

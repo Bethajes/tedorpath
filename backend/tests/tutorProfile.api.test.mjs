@@ -638,6 +638,10 @@ describe('POST /api/tutor-profile/submit', () => {
     const { status, body } = await api('/api/tutor-profile/submit', { method: 'POST', token })
 
     assert.equal(status, 400)
-    assert.equal(body.error.code, 'INVALID_STATUS')
+    // The extended submit endpoint (Requirements 25.4, 28.5) reports a
+    // PENDING_REVIEW resubmission with its own code rather than the generic
+    // INVALID_STATUS, so the applicant can be told "already under review"
+    // instead of "invalid status".
+    assert.equal(body.error.code, 'ALREADY_UNDER_REVIEW')
   })
 })

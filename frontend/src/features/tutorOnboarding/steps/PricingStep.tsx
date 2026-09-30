@@ -29,15 +29,32 @@ export function PricingStep({ form }: PricingStepProps) {
         <Field
           id="hourlyRate"
           label="Hourly Rate (£)"
-          hint="Your rate per hour in GBP. Leave blank if you prefer to discuss pricing."
+          required
+          hint="Your rate per hour in GBP, up to £9999.99. This is required before you can submit — you can change it later."
           error={errors.hourlyRate?.message}
         >
           {(fieldProps) => (
             <Input
-              {...register('hourlyRate')}
+              {...register('hourlyRate', {
+                required: 'Please enter your hourly rate — it is required to submit.',
+                validate: (value) => {
+                  const trimmed = value.trim()
+                  if (trimmed === '') return 'Please enter your hourly rate — it is required to submit.'
+
+                  const parsed = Number(trimmed)
+                  if (!Number.isFinite(parsed)) return 'Hourly rate must be a number.'
+                  if (parsed < 0) return 'Hourly rate cannot be negative.'
+                  if (parsed > 9999.99) return 'Hourly rate must be £9999.99 or less.'
+                  if (!/^\d+(\.\d{1,2})?$/.test(trimmed)) {
+                    return 'Hourly rate can have at most two decimal places.'
+                  }
+                  return true
+                },
+              })}
               {...fieldProps}
               type="number"
               min="0"
+              max="9999.99"
               step="0.01"
               placeholder="e.g. 35"
               invalid={Boolean(errors.hourlyRate)}
@@ -53,7 +70,12 @@ export function PricingStep({ form }: PricingStepProps) {
         >
           {(fieldProps) => (
             <Input
-              {...register('languages')}
+              {...register('languages', {
+                maxLength: {
+                  value: 200,
+                  message: 'Languages must be 200 characters or fewer.',
+                },
+              })}
               {...fieldProps}
               placeholder="English, French"
               invalid={Boolean(errors.languages)}
@@ -70,7 +92,12 @@ export function PricingStep({ form }: PricingStepProps) {
           >
             {(fieldProps) => (
               <Textarea
-                {...register('availability')}
+                {...register('availability', {
+                  maxLength: {
+                    value: 300,
+                    message: 'Availability must be 300 characters or fewer.',
+                  },
+                })}
                 {...fieldProps}
                 rows={4}
                 maxLength={300}

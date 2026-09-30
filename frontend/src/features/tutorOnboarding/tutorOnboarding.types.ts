@@ -1,10 +1,33 @@
 /**
  * Types for the tutor onboarding wizard.
  *
- * Requirements: 11.1, 11.2, 11.3, 11.4, 11.5
+ * Requirements: 11.1, 11.2, 11.3, 11.4, 11.5, 19.1
  */
 
 import type { TeachingMode } from '@/features/tutors/tutors.types'
+
+/**
+ * Every state a tutor profile can be in.
+ *
+ * NEEDS_INFORMATION is new in the extended verification workflow: an admin can
+ * ask the tutor for more information without rejecting them, and the wizard
+ * has to be able to represent that.
+ */
+export type TutorProfileStatus =
+  | 'DRAFT'
+  | 'PENDING_REVIEW'
+  | 'APPROVED'
+  | 'SUSPENDED'
+  | 'REJECTED'
+  | 'NEEDS_INFORMATION'
+
+/** Mirrors the Prisma VerificationStatus enum. */
+export type TutorVerificationStatus =
+  | 'UNVERIFIED'
+  | 'DOCUMENTS_REQUESTED'
+  | 'DOCUMENTS_RECEIVED'
+  | 'VERIFIED'
+  | 'NEEDS_MORE_INFORMATION'
 
 /**
  * Profile data as returned by `GET /api/tutor-profile/me`.
@@ -25,8 +48,17 @@ export interface MyTutorProfile {
   hourlyRate: number | null
   experience: string | null
   education: string | null
-  profileStatus: 'DRAFT' | 'PENDING_REVIEW' | 'APPROVED' | 'SUSPENDED' | 'REJECTED'
-  verificationStatus: 'UNVERIFIED' | 'VERIFIED'
+  profileStatus: TutorProfileStatus
+  verificationStatus: TutorVerificationStatus
+  /**
+   * Moderation feedback, written only by the admin API and read back only by
+   * the owning tutor. Null until an admin has actually said something, which is
+   * why the status page treats every one of them as optional.
+   * Requirements: 20.3, 21.5, 21.6, 22.7
+   */
+  applicationReference: string | null
+  rejectionReason: string | null
+  adminMessage: string | null
   subjects: Array<{ id: string; name: string; slug: string }>
   createdAt: string
   updatedAt: string

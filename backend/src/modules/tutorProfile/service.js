@@ -293,6 +293,15 @@ export async function getMyTutorProfile(userId) {
         education: profile.education,
         profileStatus: profile.profileStatus,
         verificationStatus: profile.verificationStatus,
+        // Moderation feedback for the applicant. These are written only by the
+        // admin API and read back only by the tutor who owns the profile, so
+        // returning them here is safe: the status page needs the reference
+        // number, and on REJECTED or NEEDS_INFORMATION the reason and the
+        // admin's message are what the tutor has to act on.
+        // Requirements: 20.3, 21.5, 21.6, 22.7
+        applicationReference: profile.applicationReference,
+        rejectionReason: profile.rejectionReason,
+        adminMessage: profile.adminMessage,
         createdAt: profile.createdAt,
         updatedAt: profile.updatedAt,
         subjects: profile.subjects.map((ps) => ps.subject),
@@ -309,12 +318,41 @@ export async function getMyTutorProfile(userId) {
 }
 
 /**
+ * Generate an application reference in the format TT-YYYY-NNNNNN.
+ *
+ * Must be called inside a Prisma transaction so that the count + write is
+ * atomic and concurrent submissions cannot produce duplicate references.
+ *
+ * @param {object} tx - Prisma transaction client
+ * @returns {Promise<string>}
+ */
+async function generateApplicationReference(tx) {
+  const year = new Date().getFullYear()
+  const prefix = `TT-${year}-`
+
+  // Count profiles that already have a reference for this year
+  const count = await tx.tutorProfile.count({
+    where: {
+      applicationReference: {
+        startsWith: prefix,
+      },
+    },
+  })
+
+  const seq = String(count + 1).padStart(6, '0')
+  return `${prefix}${seq}`
+}
+
+/**
  * Submit a tutor profile for review.
  *
- * Requirements: 6.6, 6.7
- * - Validates completeness (displayName, headline, bio, ≥1 subject, ≥1 level, teachingMode, hourlyRate)
- * - Transitions to PENDING_REVIEW if complete
- * - Returns 422 with missing field list if incomplete
+ * Requirements: 6.6, 6.7, 20.1, 20.2, 20.5, 20.6, 25.4, 25.5, 28.4, 28.5, 28.6
+ * - Accepts profileStatus in ['DRAFT', 'REJECTED', 'NEEDS_INFORMATION']
+ * - Returns ALREADY_UNDER_REVIEW for PENDING_REVIEW
+ * - Returns ALREADY_APPROVED for APPROVED
+ * - Generates applicationReference (TT-YYYY-NNNNNN) on first submission
+ * - Retains existing applicationReference on resubmission
+ * - Validates completeness before transitioning to PENDING_REVIEW
  *
  * @param {string} userId - User ID
  * @returns {Promise<{success: true, data: object}|{success: false, code: string, message: string, fields?: Array<string>}>}
@@ -341,12 +379,28 @@ export async function submitTutorProfile(userId) {
       }
     }
 
-    // Check if profile is already in a non-DRAFT state
-    if (profile.profileStatus !== 'DRAFT') {
+    // Guard: only DRAFT, REJECTED, and NEEDS_INFORMATION may submit
+    if (profile.profileStatus === 'PENDING_REVIEW') {
+      return {
+        success: false,
+        code: 'ALREADY_UNDER_REVIEW',
+        message: 'Profile is already under review.',
+      }
+    }
+
+    if (profile.profileStatus === 'APPROVED') {
+      return {
+        success: false,
+        code: 'ALREADY_APPROVED',
+        message: 'Profile is already approved.',
+      }
+    }
+
+    if (profile.profileStatus === 'SUSPENDED') {
       return {
         success: false,
         code: 'INVALID_STATUS',
-        message: `Profile cannot be submitted from ${profile.profileStatus} status.`,
+        message: 'Suspended profiles cannot be resubmitted.',
       }
     }
 
@@ -370,20 +424,30 @@ export async function submitTutorProfile(userId) {
       }
     }
 
-    // Update profile status to PENDING_REVIEW
-    const updatedProfile = await prisma.tutorProfile.update({
-      where: { userId },
-      data: {
-        profileStatus: 'PENDING_REVIEW',
-        updatedAt: new Date(),
-      },
-      include: {
-        subjects: {
-          include: {
-            subject: true,
+    // Wrap the reference generation and status update in a transaction so
+    // concurrent submissions cannot produce duplicate references.
+    const updatedProfile = await prisma.$transaction(async (tx) => {
+      // Generate a reference only if one does not already exist
+      let applicationReference = profile.applicationReference
+      if (!applicationReference) {
+        applicationReference = await generateApplicationReference(tx)
+      }
+
+      return tx.tutorProfile.update({
+        where: { userId },
+        data: {
+          profileStatus: 'PENDING_REVIEW',
+          applicationReference,
+          updatedAt: new Date(),
+        },
+        include: {
+          subjects: {
+            include: {
+              subject: true,
+            },
           },
         },
-      },
+      })
     })
 
     return {
@@ -391,6 +455,7 @@ export async function submitTutorProfile(userId) {
       data: {
         id: updatedProfile.id,
         profileStatus: updatedProfile.profileStatus,
+        applicationReference: updatedProfile.applicationReference,
         updatedAt: updatedProfile.updatedAt,
       },
     }

@@ -42,9 +42,17 @@ export default defineConfig({
     setupFiles: ['./src/test/setup.ts'],
     include: ['src/**/*.test.{ts,tsx}'],
     // The property tests render a component 100 times inside a single test, and
-    // jsdom rendering is not fast. Several test files run in parallel, so the
-    // default 5s budget is not enough headroom: these tests pass in seconds on
-    // an idle machine and then fail purely because the suite was busy.
-    testTimeout: 30_000,
+    // jsdom rendering is not fast. Test files run in parallel, so these tests
+    // pass in seconds on an idle machine and then fail purely because the suite
+    // was busy: the 5s default is far too small, and so was the 30s this used
+    // to allow once the suite grew past a dozen files.
+    //
+    // They must be allowed to finish rather than time out. A timed-out property
+    // test is worse than a slow one: its async loop keeps rendering into fresh
+    // containers after Testing Library's `cleanup` has run, so its abandoned
+    // DOM leaks into the next test and that one fails for an unrelated reason.
+    testTimeout: 180_000,
+    // Reported next to a timeout so a slow test is obvious in the output.
+    slowTestThreshold: 20_000,
   },
 })

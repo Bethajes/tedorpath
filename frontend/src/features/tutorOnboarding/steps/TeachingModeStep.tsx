@@ -27,6 +27,17 @@ export function TeachingModeStep({ form }: TeachingModeStepProps) {
 
   return (
     <div className="space-y-6">
+      {/* Registered so the rule below runs when a mode is chosen or when the
+          step is submitted empty. `teachingMode` is required for the profile to
+          be complete (Requirement 18.5), so an untouched step has to be able to
+          report that rather than passing through silently. */}
+      <input
+        type="hidden"
+        {...register('teachingMode', {
+          required: 'Please choose how you teach: online, in person, or both.',
+        })}
+      />
+
       <div className="rounded-xl border border-ink-200 bg-white shadow-sm">
         <div className="border-b border-ink-100 px-5 py-4 sm:px-6">
           <h2 className="text-lg font-semibold text-ink-900">Teaching Mode</h2>
@@ -73,7 +84,12 @@ export function TeachingModeStep({ form }: TeachingModeStepProps) {
             >
               {(fieldProps) => (
                 <Input
-                  {...register('location')}
+                  {...register('location', {
+                    maxLength: {
+                      value: 120,
+                      message: 'Location must be 120 characters or fewer.',
+                    },
+                  })}
                   {...fieldProps}
                   placeholder="e.g. London, UK"
                   autoComplete="address-level2"

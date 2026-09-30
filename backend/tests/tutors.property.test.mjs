@@ -169,12 +169,19 @@ describe('Property 1: Only approved profiles appear in the public directory', ()
      * For any set of TutorProfiles with mixed statuses, the API must only
      * return those with profileStatus = APPROVED.
      */
-    const allStatuses = ['DRAFT', 'PENDING_REVIEW', 'APPROVED', 'SUSPENDED', 'REJECTED']
+    const allStatuses = [
+      'DRAFT',
+      'PENDING_REVIEW',
+      'APPROVED',
+      'SUSPENDED',
+      'REJECTED',
+      'NEEDS_INFORMATION',
+    ]
 
     await fc.assert(
       fc.asyncProperty(
         // Pick a random non-empty subset of statuses to seed
-        fc.shuffledSubarray(allStatuses, { minLength: 2, maxLength: 5 }),
+        fc.shuffledSubarray(allStatuses, { minLength: 2, maxLength: 6 }),
         async (statuses) => {
           const ids = []
           for (const status of statuses) {
@@ -204,6 +211,136 @@ describe('Property 1: Only approved profiles appear in the public directory', ()
         },
       ),
       { numRuns: 10 }, // Reduced: each run hits the real DB
+    )
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Property 13: NEEDS_INFORMATION profiles are not publicly visible
+// ---------------------------------------------------------------------------
+
+describe('Property 13: NEEDS_INFORMATION profiles are not publicly visible', () => {
+  it('never appears in the directory list, whatever else is seeded alongside it', async () => {
+    /**
+     * **Feature: tutor-marketplace-extended, Property 13: NEEDS_INFORMATION profiles are not publicly visible**
+     * **Validates: Requirements 19.6, 29.1, 29.2**
+     *
+     * For any TutorProfile in NEEDS_INFORMATION, the public directory must
+     * never return it, and its detail endpoint must never resolve it. The
+     * status means the admin has asked the tutor for more information — the
+     * application is mid-conversation, not live, so it must stay off the
+     * public site no matter which other profiles exist.
+     */
+    const others = ['DRAFT', 'PENDING_REVIEW', 'APPROVED', 'SUSPENDED', 'REJECTED']
+
+    await fc.assert(
+      fc.asyncProperty(
+        // Any mix of other statuses sharing the query with the one under test.
+        fc.shuffledSubarray(others, { minLength: 0, maxLength: others.length }),
+        async (companionStatuses) => {
+          const subject = await seedProfile({ profileStatus: 'NEEDS_INFORMATION' })
+
+          const companions = []
+          for (const status of companionStatuses) {
+            const { profileId } = await seedProfile({ profileStatus: status })
+            companions.push({ profileId, status })
+          }
+
+          const { status, body } = await api('/api/tutors?limit=100')
+          assert.equal(status, 200)
+          assert.equal(body.success, true)
+
+          const returnedIds = new Set(body.data.items.map((item) => item.id))
+          assert.ok(
+            !returnedIds.has(subject.profileId),
+            'a NEEDS_INFORMATION profile must never be returned by the directory',
+          )
+
+          // The other statuses keep behaving exactly as they did: APPROVED
+          // shows up, everything else does not. This guards against a fix that
+          // simply widens or narrows the filter wholesale.
+          for (const { profileId, status: companionStatus } of companions) {
+            if (companionStatus === 'APPROVED') {
+              assert.ok(returnedIds.has(profileId), 'APPROVED profiles must still be listed')
+            } else {
+              assert.ok(
+                !returnedIds.has(profileId),
+                `${companionStatus} must still be hidden`,
+              )
+            }
+          }
+        },
+      ),
+      { numRuns: 8 },
+    )
+  })
+
+  it('always 404s the detail endpoint, for any starting state of the database', async () => {
+    /**
+     * The detail endpoint resolves by id, so a NEEDS_INFORMATION profile is the
+     * case most likely to leak: a student with a bookmarked URL would get a
+     * live page for a profile that is not approved. It must be indistinguishable
+     * from a profile that does not exist.
+     */
+    const others = ['DRAFT', 'PENDING_REVIEW', 'APPROVED', 'SUSPENDED', 'REJECTED']
+
+    await fc.assert(
+      fc.asyncProperty(
+        fc.shuffledSubarray(others, { minLength: 0, maxLength: others.length }),
+        async (companionStatuses) => {
+          const subject = await seedProfile({ profileStatus: 'NEEDS_INFORMATION' })
+
+          for (const status of companionStatuses) {
+            await seedProfile({ profileStatus: status })
+          }
+
+          const { status: httpStatus, body } = await api(`/api/tutors/${subject.profileId}`)
+
+          assert.equal(
+            httpStatus,
+            404,
+            'a NEEDS_INFORMATION profile must 404 exactly like a missing one',
+          )
+          assert.equal(body.success, false)
+        },
+      ),
+      { numRuns: 8 },
+    )
+  })
+
+  it('never returns the admin message on a NEEDS_INFORMATION profile', async () => {
+    /**
+     * The admin's message is written for the applicant, and the applicant reads
+     * it through the authenticated /me endpoint. It must not reach the public
+     * API even if the profile were somehow matched by a filter.
+     */
+    const secret = 'INTERNAL-ADMIN-MESSAGE-MARKER'
+
+    await fc.assert(
+      fc.asyncProperty(
+        fc.shuffledSubarray(['DRAFT', 'PENDING_REVIEW', 'APPROVED'], {
+          minLength: 1,
+          maxLength: 3,
+        }),
+        async (companionStatuses) => {
+          await seedProfile({
+            profileStatus: 'NEEDS_INFORMATION',
+            adminMessage: secret,
+            adminNotes: secret,
+          })
+
+          for (const status of companionStatuses) {
+            await seedProfile({ profileStatus: status })
+          }
+
+          const { body } = await api('/api/tutors?limit=100')
+          assert.ok(
+            !JSON.stringify(body).includes(secret),
+            'admin-only messages must never appear in the public directory',
+          )
+        },
+      ),
+      { numRuns: 6 },
     )
   })
 })

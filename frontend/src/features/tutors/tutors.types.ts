@@ -97,6 +97,12 @@ interface TutorPublicFields {
   hourlyRate: number | null
   /** Whatever levels the profile stored — see TutorStudentLevel. */
   studentLevels: string[]
+  /**
+   * Teaching languages. Sent on the card as well as the detail response so a
+   * visitor filtering by language can see why a tutor matched.
+   * Requirement: 30.6
+   */
+  languages: string[]
   /** ISO 8601; a JSON string, not a Date, once it reaches the browser. */
   createdAt: string
 }
@@ -123,7 +129,6 @@ export interface TutorCardDTO extends TutorPublicFields {
  */
 export interface TutorDetailDTO extends TutorPublicFields {
   bio: string | null
-  languages: string[]
   availability: string | null
   experience: string | null
   education: string | null
@@ -149,6 +154,15 @@ export interface TutorFilters {
   mode?: TeachingMode
   /** Case-insensitive substring match. */
   location?: string
+  /**
+   * Teaching language, matched case-insensitively against a tutor's `languages`.
+   *
+   * Free text, like `location`, because the array is tutor-authored: the
+   * onboarding form takes a comma-separated list, so the possible values are
+   * whatever tutors typed and an enum would exclude most of them.
+   * Requirements: 30.2, 30.4
+   */
+  language?: string
   minRate?: number
   maxRate?: number
   sort?: TutorSortOption
@@ -166,4 +180,30 @@ export interface TutorPagination {
 export interface TutorListResponse {
   items: TutorCardDTO[]
   pagination: TutorPagination
+}
+
+/**
+ * The `data` payload of a successful `GET /api/public/stats`.
+ *
+ * Every field is a live count of real database records — there is no client-side
+ * default and nothing here is seeded, so a zero is a real zero rather than a
+ * missing value. Callers must render honest non-numerical wording for a zero
+ * instead of printing it.
+ *
+ * `universities` and `countries` count the distinct `education` and `location`
+ * values written on APPROVED profiles. Both fields are tutor-authored free text,
+ * so these are "how many distinct entries approved tutors have given", not a
+ * verified institution or country list.
+ *
+ * Requirements: 4.2, 4.4
+ */
+export interface PublicStats {
+  /** APPROVED tutor profiles — the profiles actually visible in the directory. */
+  approvedTutors: number
+  /** Subjects that are active, i.e. offered in the pickers and the filters. */
+  subjects: number
+  /** Distinct non-blank education entries across APPROVED profiles. */
+  universities: number
+  /** Distinct non-blank location entries across APPROVED profiles. */
+  countries: number
 }

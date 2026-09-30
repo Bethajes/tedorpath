@@ -18,19 +18,31 @@ export interface TutorRequestPrefill {
   subject: Subject | ''
   educationLevel: EducationLevel | ''
   learningMode: LearningMode | ''
+  /**
+   * The TutorProfile the client opened the form from, if any.
+   *
+   * Validated as a UUID for the same reason as the other values: a hand-edited
+   * URL must not be able to seed the form with an id the API would reject.
+   */
+  tutorProfileId: string
 }
+
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
 function pick<T extends string>(value: string | null | undefined, allowed: readonly T[]): T | '' {
   return value != null && (allowed as readonly string[]).includes(value) ? (value as T) : ''
 }
 
-/** Read `?subject=&level=&mode=` from a location search string, ignoring junk. */
+/** Read `?tutorId=&subject=&level=&mode=` from a location search string, ignoring junk. */
 export function parseTutorRequestPrefill(search: string): TutorRequestPrefill {
   const params = new URLSearchParams(search)
+  const tutorId = params.get('tutorId') ?? ''
+
   return {
     subject: pick(params.get('subject'), SUBJECTS),
     educationLevel: pick(params.get('level'), EDUCATION_LEVELS),
     learningMode: pick(params.get('mode'), LEARNING_MODES),
+    tutorProfileId: UUID_PATTERN.test(tutorId) ? tutorId : '',
   }
 }
 

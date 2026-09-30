@@ -14,11 +14,21 @@ import { cn } from '@/lib/cn'
  * Escape, on a click outside and on losing focus, so keyboard and pointer users
  * are treated the same.
  */
-export function UserMenu() {
+export interface UserMenuProps {
+  /**
+   * Colour treatment for the trigger. `dark` is for the dark header band; the
+   * dropdown panel itself stays light either way, because a light panel on a
+   * dark surface is what makes the menu readable.
+   */
+  tone?: 'light' | 'dark'
+}
+
+export function UserMenu({ tone = 'light' }: UserMenuProps = {}) {
   const { user, signOut } = useAuth()
   const [open, setOpen] = useState(false)
   const [signingOut, setSigningOut] = useState(false)
   const containerRef = useRef<HTMLDivElement>(null)
+  const isDark = tone === 'dark'
 
   useEffect(() => {
     if (!open) return
@@ -73,11 +83,14 @@ export function UserMenu() {
         aria-expanded={open}
         aria-haspopup="menu"
         onClick={() => setOpen((value) => !value)}
-        className="inline-flex items-center gap-2.5 rounded-lg px-2 py-1.5 text-[0.95rem] font-medium text-ink-700 transition-colors hover:bg-ink-50"
+        className={cn(
+          'inline-flex items-center gap-2.5 rounded-md px-2 py-1.5 text-[0.95rem] font-medium transition-colors',
+          isDark ? 'text-ink-100 hover:bg-ink-800' : 'text-ink-700 hover:bg-ink-50',
+        )}
       >
         <span
           aria-hidden="true"
-          className="flex h-8 w-8 items-center justify-center rounded-full bg-brand-600 text-sm font-semibold text-white"
+          className="flex h-8 w-8 items-center justify-center rounded-full bg-accent-500 text-sm font-semibold text-white"
         >
           {initial}
         </span>
@@ -92,7 +105,11 @@ export function UserMenu() {
           strokeWidth="1.8"
           strokeLinecap="round"
           strokeLinejoin="round"
-          className={cn('text-ink-500 transition-transform', open && 'rotate-180')}
+          className={cn(
+            'transition-transform',
+            isDark ? 'text-ink-400' : 'text-ink-500',
+            open && 'rotate-180',
+          )}
         >
           <path d="M3 5.5 7 9.5l4-4" />
         </svg>
@@ -114,16 +131,37 @@ export function UserMenu() {
               to="/request-tutor"
               role="menuitem"
               onClick={() => setOpen(false)}
-              className="block rounded-lg px-3 py-2 text-sm text-ink-700 transition-colors hover:bg-ink-50"
+              className={cn(
+                'block rounded-lg px-3 py-2 text-sm transition-colors',
+                isDark ? 'text-ink-200 hover:bg-ink-800' : 'text-ink-700 hover:bg-ink-50',
+              )}
             >
               Find a tutor
+            </Link>
+            {/* A tutor who has applied needs to be able to get back to their
+                application status from anywhere. It resolves to "no application
+                yet" for someone who has not applied, so it is not worth gating
+                on a second request. */}
+            <Link
+              to="/tutor/application-status"
+              role="menuitem"
+              onClick={() => setOpen(false)}
+              className={cn(
+                'block rounded-lg px-3 py-2 text-sm transition-colors',
+                isDark ? 'text-ink-200 hover:bg-ink-800' : 'text-ink-700 hover:bg-ink-50',
+              )}
+            >
+              My tutor application
             </Link>
             <button
               type="button"
               role="menuitem"
               onClick={handleSignOut}
               disabled={signingOut}
-              className="block w-full rounded-lg px-3 py-2 text-left text-sm text-ink-700 transition-colors hover:bg-ink-50 disabled:opacity-60"
+              className={cn(
+                'block w-full rounded-lg px-3 py-2 text-left text-sm transition-colors disabled:opacity-60',
+                isDark ? 'text-ink-200 hover:bg-ink-800' : 'text-ink-700 hover:bg-ink-50',
+              )}
             >
               {signingOut ? 'Signing out…' : 'Sign out'}
             </button>

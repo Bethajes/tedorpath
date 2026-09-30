@@ -427,3 +427,253 @@ describe('Property 8: Profile ownership is enforced server-side', () => {
     )
   })
 })
+
+// ---------------------------------------------------------------------------
+// Helpers for submission tests — builds a complete, submittable profile
+// ---------------------------------------------------------------------------
+
+/**
+ * Seed a Subject row and return its id. Re-uses an existing subject with this
+ * name if one already exists (idempotent across test runs).
+ */
+async function ensureSubject(name = 'Mathematics') {
+  const slug = name.toLowerCase().replace(/\s+/g, '-')
+  const existing = await prisma.subject.findUnique({ where: { slug } })
+  if (existing) return existing.id
+  const created = await prisma.subject.create({
+    data: { name, slug, category: 'Test', active: true },
+  })
+  return created.id
+}
+
+/**
+ * Create a complete DRAFT profile that passes validateProfileCompleteness.
+ * The caller receives the profile + its subjectId so it can be reused.
+ */
+async function createCompleteProfile(userId, overrides = {}) {
+  const subjectId = await ensureSubject()
+
+  const profile = await prisma.tutorProfile.create({
+    data: {
+      userId,
+      displayName: 'Test Tutor',
+      headline: 'Great tutor',
+      bio: 'I have been teaching for 10 years.',
+      teachingMode: 'ONLINE',
+      studentLevels: ['High School'],
+      hourlyRate: 50,
+      profileStatus: overrides.profileStatus || 'DRAFT',
+      verificationStatus: 'UNVERIFIED',
+      applicationReference: overrides.applicationReference || null,
+      subjects: {
+        create: [{ subject: { connect: { id: subjectId } } }],
+      },
+    },
+  })
+  createdProfileIds.push(profile.id)
+  return { profile, subjectId }
+}
+
+// ---------------------------------------------------------------------------
+// Property 14: Application reference is generated exactly once per profile
+// Feature: tutor-marketplace-extended, Property 14: Application reference is generated exactly once per profile
+// Validates: Requirements 20.1, 20.5, 20.6
+// ---------------------------------------------------------------------------
+
+describe('Property 14: Application reference is generated exactly once per profile', () => {
+  it('first submission generates a reference matching TT-YYYY-NNNNNN, resubmission retains it', async () => {
+    /**
+     * **Feature: tutor-marketplace-extended, Property 14: Application reference is generated exactly once per profile**
+     * **Validates: Requirements 20.1, 20.5, 20.6**
+     *
+     * For any TutorProfile, calling POST /api/tutor-profile/submit for the first
+     * time must set applicationReference to a non-null value matching
+     * TT-YYYY-NNNNNN. A subsequent resubmission (from REJECTED or
+     * NEEDS_INFORMATION) must leave applicationReference unchanged.
+     */
+    await fc.assert(
+      fc.asyncProperty(
+        fc.constantFrom('REJECTED', 'NEEDS_INFORMATION'),
+        async (resubmitStatus) => {
+          const { userId, sessionToken } = await createTestUser()
+          await createCompleteProfile(userId)
+
+          // First submission: DRAFT → PENDING_REVIEW, generates reference
+          const first = await apiAuth('/api/tutor-profile/submit', {
+            method: 'POST',
+          }, sessionToken)
+
+          assert.equal(first.status, 200, `First submit failed: ${JSON.stringify(first.body)}`)
+          assert.equal(first.body.success, true)
+
+          const ref = first.body.data.applicationReference
+          assert.ok(ref, 'applicationReference must be set after first submit')
+          assert.match(ref, /^TT-\d{4}-\d{6}$/, 'reference must match TT-YYYY-NNNNNN')
+
+          // Manually move the profile to the resubmit status so we can test retention
+          await prisma.tutorProfile.update({
+            where: { userId },
+            data: { profileStatus: resubmitStatus },
+          })
+
+          // Resubmission: REJECTED/NEEDS_INFORMATION → PENDING_REVIEW, retains reference
+          const second = await apiAuth('/api/tutor-profile/submit', {
+            method: 'POST',
+          }, sessionToken)
+
+          assert.equal(second.status, 200, `Resubmit failed: ${JSON.stringify(second.body)}`)
+          assert.equal(second.body.data.applicationReference, ref,
+            'applicationReference must be identical on resubmission')
+        }
+      ),
+      { numRuns: 10 }
+    )
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Property 15: Application reference values are unique across all profiles
+// Feature: tutor-marketplace-extended, Property 15: Application reference values are unique across all profiles
+// Validates: Requirements 20.2
+// ---------------------------------------------------------------------------
+
+describe('Property 15: Application reference values are unique across all profiles', () => {
+  it('submitting N distinct profiles produces N distinct applicationReference values', async () => {
+    /**
+     * **Feature: tutor-marketplace-extended, Property 15: Application reference values are unique across all profiles**
+     * **Validates: Requirements 20.2**
+     *
+     * For any two distinct TutorProfiles that have both been submitted at least
+     * once, their applicationReference values must be different strings.
+     * No two profiles may share a reference.
+     *
+     * Strategy: submit a batch of complete profiles sequentially and verify
+     * that all resulting references form a set of the same size (i.e., no
+     * duplicates). Sequentially rather than concurrently, because Node's
+     * single-threaded event loop plus Prisma's transaction serialisation makes
+     * sequential the realistic production path on a single-host deployment.
+     */
+    await fc.assert(
+      fc.asyncProperty(
+        fc.integer({ min: 2, max: 5 }),
+        async (batchSize) => {
+          // Create batchSize users, each with a complete DRAFT profile
+          const users = []
+          for (let i = 0; i < batchSize; i++) {
+            const { userId, sessionToken } = await createTestUser()
+            await createCompleteProfile(userId)
+            users.push({ userId, sessionToken })
+          }
+
+          // Submit each profile sequentially and collect the references
+          const references = []
+          for (const { sessionToken } of users) {
+            const { status, body } = await apiAuth('/api/tutor-profile/submit', {
+              method: 'POST',
+            }, sessionToken)
+
+            assert.equal(status, 200, `Submit failed: ${JSON.stringify(body)}`)
+            assert.ok(
+              body.data.applicationReference,
+              'applicationReference must be set after submission'
+            )
+            references.push(body.data.applicationReference)
+          }
+
+          // All references must be distinct — a Set drops duplicates, so its
+          // size must equal the original array length.
+          const unique = new Set(references)
+          assert.equal(
+            unique.size,
+            references.length,
+            `Duplicate applicationReference found among: ${references.join(', ')}`
+          )
+        }
+      ),
+      { numRuns: 5 } // Each run submits up to 5 profiles against the real DB
+    )
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Property 17: Resubmission from REJECTED or NEEDS_INFORMATION transitions to PENDING_REVIEW
+// Feature: tutor-marketplace-extended, Property 17: Resubmission from REJECTED or NEEDS_INFORMATION transitions to PENDING_REVIEW
+// Validates: Requirements 25.4, 25.5, 28.4
+// ---------------------------------------------------------------------------
+
+describe('Property 17: Resubmission transitions to PENDING_REVIEW without changing the reference', () => {
+  it('submitting from REJECTED or NEEDS_INFORMATION sets status to PENDING_REVIEW and retains reference', async () => {
+    /**
+     * **Feature: tutor-marketplace-extended, Property 17: Resubmission from REJECTED or NEEDS_INFORMATION transitions to PENDING_REVIEW**
+     * **Validates: Requirements 25.4, 25.5, 28.4**
+     *
+     * For any complete TutorProfile whose profileStatus is REJECTED or
+     * NEEDS_INFORMATION, calling POST /api/tutor-profile/submit must:
+     * (a) return success, (b) set profileStatus to PENDING_REVIEW, and
+     * (c) leave applicationReference identical to its value before the call.
+     */
+    await fc.assert(
+      fc.asyncProperty(
+        fc.constantFrom('REJECTED', 'NEEDS_INFORMATION'),
+        async (startStatus) => {
+          const { userId, sessionToken } = await createTestUser()
+          // Use a unique reference per run to avoid the unique constraint collision.
+          // The reference format matches TT-YYYY-NNNNNN for a recognisable shape,
+          // but we embed a random suffix so no two test runs share a value.
+          const existingRef = `TT-${new Date().getFullYear()}-${randomBytes(3).toString('hex')}`
+          await createCompleteProfile(userId, {
+            profileStatus: startStatus,
+            applicationReference: existingRef,
+          })
+
+          const { status, body } = await apiAuth('/api/tutor-profile/submit', {
+            method: 'POST',
+          }, sessionToken)
+
+          assert.equal(status, 200, `Expected 200, got ${status}: ${JSON.stringify(body)}`)
+          assert.equal(body.success, true)
+          assert.equal(body.data.profileStatus, 'PENDING_REVIEW')
+          assert.equal(body.data.applicationReference, existingRef,
+            'applicationReference must not change on resubmission')
+
+          // Verify in DB
+          const dbProfile = await prisma.tutorProfile.findUnique({ where: { userId } })
+          assert.equal(dbProfile.profileStatus, 'PENDING_REVIEW')
+          assert.equal(dbProfile.applicationReference, existingRef)
+        }
+      ),
+      { numRuns: 10 }
+    )
+  })
+
+  it('submitting from PENDING_REVIEW returns 400 ALREADY_UNDER_REVIEW', async () => {
+    /**
+     * Validates: Requirements 28.5
+     * Guard: a profile already under review must not be resubmitted.
+     */
+    const { userId, sessionToken } = await createTestUser()
+    await createCompleteProfile(userId, { profileStatus: 'PENDING_REVIEW' })
+
+    const { status, body } = await apiAuth('/api/tutor-profile/submit', {
+      method: 'POST',
+    }, sessionToken)
+
+    assert.equal(status, 400)
+    assert.equal(body.error.code, 'ALREADY_UNDER_REVIEW')
+  })
+
+  it('submitting from APPROVED returns 400 ALREADY_APPROVED', async () => {
+    /**
+     * Validates: Requirements 28.6
+     */
+    const { userId, sessionToken } = await createTestUser()
+    await createCompleteProfile(userId, { profileStatus: 'APPROVED' })
+
+    const { status, body } = await apiAuth('/api/tutor-profile/submit', {
+      method: 'POST',
+    }, sessionToken)
+
+    assert.equal(status, 400)
+    assert.equal(body.error.code, 'ALREADY_APPROVED')
+  })
+})

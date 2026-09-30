@@ -10,7 +10,7 @@ import { subjectsRouter } from './modules/subjects/index.js'
 import { uploadsRouter } from './modules/uploads/index.js'
 import { tutorProfileRouter } from './modules/tutorProfile/index.js'
 import { tutorRequestsRouter } from './modules/tutorRequests/index.js'
-import { tutorsRouter } from './modules/tutors/index.js'
+import { publicRouter, tutorsRouter } from './modules/tutors/index.js'
 import { healthRouter } from './routes/health.js'
 
 /**
@@ -46,6 +46,7 @@ export function createApp() {
   app.use('/api/auth', authRouter)
   app.use('/api/tutor-requests', tutorRequestsRouter)
   app.use('/api/tutors', tutorsRouter)
+  app.use('/api/public', publicRouter)
   app.use('/api/subjects', subjectsRouter)
   app.use('/api/tutor-profile', tutorProfileRouter)
   // Uploaded profile photos. Mounted before the 404 fallback below so stored

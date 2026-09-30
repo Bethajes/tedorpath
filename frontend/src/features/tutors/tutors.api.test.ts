@@ -39,6 +39,22 @@ describe('buildTutorSearchParams', () => {
     expect(query.get('location')).toBe('Addis')
   })
 
+  it('sends the language filter, trimmed', () => {
+    // Requirement 30.2: the value has to reach the API, and untrimmed input
+    // from a text box would not match anything server-side.
+    const query = buildTutorSearchParams({ language: '  English  ' })
+
+    expect(query.get('language')).toBe('English')
+  })
+
+  it('omits a blank language filter', () => {
+    // An empty `language=` would look like filtering for the empty string and
+    // return nobody, so an untouched box must send nothing.
+    const query = buildTutorSearchParams({ language: '   ' })
+
+    expect(query.has('language')).toBe(false)
+  })
+
   it('sends a zero rate instead of dropping it', () => {
     // A rate of 0 is a real filter — "free". A truthiness check would send
     // nothing and quietly show the whole directory instead.

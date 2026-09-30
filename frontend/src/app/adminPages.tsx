@@ -34,3 +34,11 @@ export const AdminRequestsPage = lazy(() =>
 export const AdminRequestDetailPage = lazy(() =>
   import('@/pages/AdminRequestDetailPage').then((m) => ({ default: m.AdminRequestDetailPage })),
 )
+
+export const AdminTutorsPage = lazy(() =>
+  import('@/pages/AdminTutorsPage').then((m) => ({ default: m.AdminTutorsPage })),
+)
+
+export const AdminTutorReviewPage = lazy(() =>
+  import('@/pages/AdminTutorReviewPage').then((m) => ({ default: m.AdminTutorReviewPage })),
+)

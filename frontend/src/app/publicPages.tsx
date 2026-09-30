@@ -55,3 +55,9 @@ export const TutorProfilePage = lazy(() =>
 export const TutorOnboardingPage = lazy(() =>
   import('@/features/tutorOnboarding/TutorOnboardingPage').then((m) => ({ default: m.TutorOnboardingPage })),
 )
+
+export const TutorApplicationStatusPage = lazy(() =>
+  import('@/features/tutorOnboarding/TutorApplicationStatusPage').then((m) => ({
+    default: m.TutorApplicationStatusPage,
+  })),
+)

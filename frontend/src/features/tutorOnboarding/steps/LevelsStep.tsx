@@ -14,7 +14,7 @@ interface LevelsStepProps {
 }
 
 export function LevelsStep({ form }: LevelsStepProps) {
-  const { watch, setValue, formState: { errors } } = form
+  const { register, watch, setValue, formState: { errors } } = form
   const selectedLevels = watch('studentLevels')
 
   function toggleLevel(level: string) {
@@ -27,6 +27,17 @@ export function LevelsStep({ form }: LevelsStepProps) {
 
   return (
     <div className="space-y-6">
+      {/* Driven by the toggle buttons, but registered so the rule below actually
+          runs when one is clicked — without it `errors.studentLevels` could
+          never be populated. Requirement 18.4. */}
+      <input
+        type="hidden"
+        {...register('studentLevels', {
+          validate: (value) =>
+            (value?.length ?? 0) > 0 || 'Please select at least one level.',
+        })}
+      />
+
       <div className="rounded-xl border border-ink-200 bg-white shadow-sm">
         <div className="border-b border-ink-100 px-5 py-4 sm:px-6">
           <h2 className="text-lg font-semibold text-ink-900">Student Levels</h2>

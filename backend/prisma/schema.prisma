@@ -32,12 +32,16 @@ enum ProfileStatus {
   APPROVED
   SUSPENDED
   REJECTED
+  NEEDS_INFORMATION
 }
 
 /// Whether the admin team has verified a tutor's stated credentials.
 enum VerificationStatus {
   UNVERIFIED
+  DOCUMENTS_REQUESTED
+  DOCUMENTS_RECEIVED
   VERIFIED
+  NEEDS_MORE_INFORMATION
 }
 
 /// The delivery method a tutor offers.
@@ -259,6 +263,14 @@ model TutorProfile {
 
   profileStatus      ProfileStatus      @default(DRAFT)
   verificationStatus VerificationStatus @default(UNVERIFIED)
+
+  // Extended verification workflow fields
+  applicationReference String?   @unique @db.VarChar(20)
+  rejectionReason      String?   @db.VarChar(100)
+  adminMessage         String?   @db.VarChar(2000)
+  adminNotes           String?   @db.VarChar(4000)
+  verificationChecklist Json?
+  verifiedAt           DateTime?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

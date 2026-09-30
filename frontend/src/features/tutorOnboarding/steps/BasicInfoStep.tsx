@@ -41,7 +41,15 @@ export function BasicInfoStep({ form }: BasicInfoStepProps) {
         >
           {(fieldProps) => (
             <Input
-              {...register('displayName')}
+              {...register('displayName', {
+                required: 'Please enter the name students will see.',
+                maxLength: {
+                  value: 100,
+                  message: 'Display name must be 100 characters or fewer.',
+                },
+                validate: (value) =>
+                  value.trim().length > 0 || 'Please enter the name students will see.',
+              })}
               {...fieldProps}
               placeholder="e.g. Sarah Johnson"
               autoComplete="name"
@@ -59,7 +67,14 @@ export function BasicInfoStep({ form }: BasicInfoStepProps) {
         >
           {(fieldProps) => (
             <Input
-              {...register('headline')}
+              {...register('headline', {
+                required: 'Please enter a headline.',
+                maxLength: {
+                  value: 160,
+                  message: 'Headline must be 160 characters or fewer.',
+                },
+                validate: (value) => value.trim().length > 0 || 'Please enter a headline.',
+              })}
               {...fieldProps}
               placeholder="e.g. Experienced Maths tutor specialising in A-Level"
               maxLength={160}
@@ -76,7 +91,12 @@ export function BasicInfoStep({ form }: BasicInfoStepProps) {
         >
           {(fieldProps) => (
             <Input
-              {...register('location')}
+              {...register('location', {
+                maxLength: {
+                  value: 120,
+                  message: 'Location must be 120 characters or fewer.',
+                },
+              })}
               {...fieldProps}
               placeholder="e.g. London, UK"
               autoComplete="address-level2"
@@ -120,7 +140,15 @@ export function BasicInfoStep({ form }: BasicInfoStepProps) {
           >
             {(fieldProps) => (
               <Textarea
-                {...register('bio')}
+                {...register('bio', {
+                  required: 'Please tell students a little about yourself.',
+                  maxLength: {
+                    value: 2000,
+                    message: 'Bio must be 2000 characters or fewer.',
+                  },
+                  validate: (value) =>
+                    value.trim().length > 0 || 'Please tell students a little about yourself.',
+                })}
                 {...fieldProps}
                 rows={6}
                 maxLength={2000}

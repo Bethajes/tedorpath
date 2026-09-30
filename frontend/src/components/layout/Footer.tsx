@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom'
 
 import { Logo } from '@/components/brand/Logo'
 import { Container } from '@/components/layout/PageShell'
+import { telegramHandle, telegramLink } from '@/lib/contactConfig'
 
 interface FooterColumn {
   title: string
@@ -9,54 +10,81 @@ interface FooterColumn {
 }
 
 /**
- * Every link below points at a route that exists. There is no tutor
- * registration, help centre, social profile or contact detail in the product
- * yet, so none are listed rather than linking to something that 404s.
+ * Every link below points at a route that exists.
+ *
+ * The "Learn" slugs are the real `subjects.slug` values in the database
+ * (mathematics, physics, programming, english, exam-preparation). Two labels the
+ * redesign originally asked for — "Science" and "Languages" — are not subjects
+ * this platform has, so pointing at them would filter the directory to a slug
+ * that matches nothing and show a visitor an empty result. Physics and English
+ * are the real subjects those links were reaching for.
+ *
+ * There is no phone number, email address, social profile or postal address
+ * anywhere here. Nothing of that kind exists in the project configuration, and
+ * Requirement 11.6 forbids inventing it. The one contact channel that *is*
+ * configurable — a Telegram handle from the environment — is rendered only when
+ * it has a value, so a half-configured deployment shows no dead link.
+ *
+ * Requirements: 11.1, 11.2, 11.3, 11.4, 11.5, 11.6, 11.7
  */
 const COLUMNS: FooterColumn[] = [
   {
-    title: 'Product',
+    title: 'Tedor Tutors',
     links: [
-      { to: '/request-tutor', label: 'Find a Tutor' },
+      { to: '/about', label: 'About' },
       { to: '/#how-it-works', label: 'How It Works' },
-      { to: '/about#become-a-tutor', label: 'Become a Tutor' },
+      { to: '/tutors', label: 'Find a Tutor' },
+      { to: '/become-a-tutor', label: 'Become a Tutor' },
     ],
   },
   {
-    title: 'Company',
+    title: 'Learn',
     links: [
-      { to: '/about', label: 'About' },
-      { to: '/contact', label: 'Contact' },
+      { to: '/tutors?subject=mathematics', label: 'Mathematics' },
+      { to: '/tutors?subject=physics', label: 'Physics' },
+      { to: '/tutors?subject=programming', label: 'Programming' },
+      { to: '/tutors?subject=english', label: 'English' },
+      { to: '/tutors?subject=exam-preparation', label: 'Exam Preparation' },
+    ],
+  },
+  {
+    title: 'Account',
+    links: [
+      { to: '/login', label: 'Log in' },
+      { to: '/register', label: 'Sign up' },
     ],
   },
   {
     title: 'Support',
-    links: [
-      { to: '/request-tutor', label: 'Request a Tutor' },
-      { to: '/#subjects', label: 'Subjects' },
-    ],
+    links: [{ to: '/contact', label: 'Contact' }],
   },
 ]
 
 export function Footer() {
+  // Read at render time, not from the module-level constant: build-time env is
+  // resolved on first import, so a constant read once could go stale and would
+  // make this untestable. See lib/contactConfig.
+  const handle = telegramHandle()
+  const telegram = telegramLink(handle)
+
   return (
-    <footer className="border-t border-ink-200 bg-ink-50">
+    <footer className="mt-auto bg-ink-950 text-ink-300">
       <Container className="py-14 sm:py-16">
-        <div className="grid gap-10 lg:grid-cols-[1.4fr_2fr] lg:gap-16">
+        <div className="grid gap-10 lg:grid-cols-[1.4fr_2.4fr] lg:gap-16">
           <div className="max-w-sm">
             <Link to="/" className="inline-flex rounded-md">
-              <Logo size="md" />
+              <Logo size="md" inverted />
             </Link>
-            <p className="mt-4 leading-relaxed text-ink-600">
+            <p className="mt-4 leading-relaxed text-ink-400">
               Learn better. Find the right tutor. Tell us what you want to learn and our team
               will help you find someone who fits.
             </p>
           </div>
 
-          <div className="grid grid-cols-2 gap-8 sm:grid-cols-3">
+          <div className="grid grid-cols-2 gap-8 sm:grid-cols-4">
             {COLUMNS.map((column) => (
               <nav key={column.title} aria-label={column.title}>
-                <h2 className="text-sm font-semibold uppercase tracking-[0.1em] text-ink-900">
+                <h2 className="text-sm font-semibold uppercase tracking-[0.1em] text-white">
                   {column.title}
                 </h2>
                 <ul className="mt-4 flex flex-col gap-3">
@@ -64,12 +92,26 @@ export function Footer() {
                     <li key={`${column.title}-${link.to}-${link.label}`}>
                       <Link
                         to={link.to}
-                        className="text-ink-600 transition-colors hover:text-brand-700"
+                        className="text-ink-400 transition-colors hover:text-accent-400"
                       >
                         {link.label}
                       </Link>
                     </li>
                   ))}
+                  {/* Only when a handle is actually configured, so a deployment
+                      without one shows no contact channel at all. */}
+                  {column.title === 'Support' && telegram && handle ? (
+                    <li>
+                      <a
+                        href={telegram}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-ink-400 transition-colors hover:text-accent-400"
+                      >
+                        Telegram
+                      </a>
+                    </li>
+                  ) : null}
                 </ul>
               </nav>
             ))}
@@ -77,8 +119,10 @@ export function Footer() {
         </div>
       </Container>
 
-      <div className="border-t border-ink-200">
+      <div className="border-t border-ink-800">
         <Container className="py-6">
+          {/* Computed at render rather than baked in, so the year cannot go
+              stale. Requirement 11.5. */}
           <p className="text-sm text-ink-500">
             &copy; {new Date().getFullYear()} Tedor Tutors. All rights reserved.
           </p>

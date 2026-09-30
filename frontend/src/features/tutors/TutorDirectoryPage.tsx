@@ -24,6 +24,8 @@ function filtersFromParams(params: URLSearchParams): TutorFilters {
   if (mode) filters.mode = mode as TutorFilters['mode']
   const location = params.get('location')
   if (location) filters.location = location
+  const language = params.get('language')
+  if (language) filters.language = language
   const minRate = params.get('minRate')
   if (minRate !== null && minRate !== '') {
     const n = Number(minRate)
@@ -54,12 +56,35 @@ const SORT_LABELS: Record<TutorSortOption, string> = {
   newest: 'Newest',
 }
 
+/**
+ * Loading placeholder.
+ *
+ * Shaped like the row card it stands in for — portrait, two text lines and a
+ * right-hand rail — so the list does not reflow when the data lands. A generic
+ * block here would change the page height twice per page view.
+ */
 function CardSkeleton() {
   return (
     <div
       aria-hidden="true"
-      className="h-56 rounded-2xl border border-ink-200 bg-white animate-pulse"
-    />
+      className="flex gap-5 rounded-2xl border border-ink-200 bg-white p-5 sm:gap-6 sm:p-6"
+    >
+      <div className="h-20 w-20 shrink-0 animate-pulse rounded-full bg-ink-100" />
+      <div className="flex-1 space-y-2.5">
+        <div className="h-5 w-2/5 animate-pulse rounded bg-ink-100" />
+        <div className="h-4 w-4/5 animate-pulse rounded bg-ink-100" />
+        <div className="h-3 w-3/5 animate-pulse rounded bg-ink-100" />
+        <div className="flex gap-1.5 pt-1.5">
+          <div className="h-6 w-20 animate-pulse rounded-full bg-ink-100" />
+          <div className="h-6 w-20 animate-pulse rounded-full bg-ink-100" />
+        </div>
+      </div>
+      <div className="hidden w-52 shrink-0 space-y-2.5 sm:block">
+        <div className="h-7 w-24 animate-pulse rounded bg-ink-100" />
+        <div className="h-6 w-32 animate-pulse rounded-full bg-ink-100" />
+        <div className="h-11 w-full animate-pulse rounded-lg bg-ink-100" />
+      </div>
+    </div>
   )
 }
 
@@ -154,6 +179,7 @@ export function TutorDirectoryPage() {
     Boolean(filters.studentLevel) ||
     Boolean(filters.mode) ||
     Boolean(filters.location) ||
+    Boolean(filters.language) ||
     filters.minRate !== undefined ||
     filters.maxRate !== undefined ||
     Boolean(filters.q)
@@ -237,15 +263,22 @@ export function TutorDirectoryPage() {
           />
 
           <div className="min-w-0 flex-1">
-            <div className="mb-5 hidden items-center justify-between md:flex">
+            <div className="mb-5 hidden items-center justify-between gap-4 md:flex">
               {pagination && (
-                <p className="text-sm text-ink-500" aria-live="polite">
+                /*
+                  The count is the page's headline number, so it is set at
+                  heading weight rather than as a quiet caption. It stays a
+                  <p> with aria-live rather than an <h2>: it is a status
+                  message, not a section title, and promoting it would add a
+                  heading level the page does not otherwise have.
+                */
+                <p className="text-lg font-semibold tracking-[-0.01em] text-ink-900" aria-live="polite">
                   {pagination.total === 0
                     ? 'No tutors found'
                     : `${pagination.total} tutor${pagination.total === 1 ? '' : 's'} found`}
                 </p>
               )}
-              <div className="flex items-center gap-2">
+              <div className="flex shrink-0 items-center gap-2">
                 <label htmlFor="sort-select-desktop" className="text-sm text-ink-600">
                   Sort:
                 </label>
@@ -270,22 +303,23 @@ export function TutorDirectoryPage() {
             )}
 
             {loading && (
-              <div
-                aria-busy="true"
-                aria-label="Loading tutors"
-                className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3"
-              >
-                {Array.from({ length: DEFAULT_TUTOR_PAGE_SIZE }).map((_, i) => (
+              <div aria-busy="true" aria-label="Loading tutors" className="flex flex-col gap-4">
+                {Array.from({ length: 6 }).map((_, i) => (
                   <CardSkeleton key={i} />
                 ))}
               </div>
             )}
 
             {!loading && !error && items.length > 0 && (
-              <ul aria-label="Tutors" className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+              // One column, not three. The row card puts the price and the call
+              // to action in a rail beside the tutor's own words, which needs
+              // width to work; three of those across a directory leaves each card
+              // too narrow to read. The three-across grid is still available on
+              // the component for the homepage featured section.
+              <ul aria-label="Tutors" className="flex flex-col gap-4">
                 {items.map((tutor) => (
                   <li key={tutor.id}>
-                    <TutorCard tutor={tutor} />
+                    <TutorCard tutor={tutor} variant="row" />
                   </li>
                 ))}
               </ul>

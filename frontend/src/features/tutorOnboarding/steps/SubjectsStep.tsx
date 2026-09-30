@@ -25,7 +25,7 @@ function mapLoadError(err: unknown): string {
 }
 
 export function SubjectsStep({ form }: SubjectsStepProps) {
-  const { watch, setValue, formState: { errors } } = form
+  const { register, watch, setValue, formState: { errors } } = form
   const selectedIds = watch('subjectIds')
 
   const load = useCallback(() => loadSubjects(), [])
@@ -52,6 +52,19 @@ export function SubjectsStep({ form }: SubjectsStepProps) {
 
   return (
     <div className="space-y-6">
+      {/* The selection is driven by the buttons below rather than by typing, but
+          the field still has to be registered for `setValue(..., {
+          shouldValidate })` to run its rule and populate `errors.subjectIds`.
+          The server treats a subject-less profile as incomplete
+          (Requirement 18.3), so it is caught here rather than at submit. */}
+      <input
+        type="hidden"
+        {...register('subjectIds', {
+          validate: (value) =>
+            (value?.length ?? 0) > 0 || 'Please select at least one subject.',
+        })}
+      />
+
       <div className="rounded-xl border border-ink-200 bg-white shadow-sm">
         <div className="border-b border-ink-100 px-5 py-4 sm:px-6">
           <h2 className="text-lg font-semibold text-ink-900">Teaching Subjects</h2>

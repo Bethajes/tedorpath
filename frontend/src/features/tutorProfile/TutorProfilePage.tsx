@@ -8,6 +8,7 @@ import { getTutor } from '@/features/tutors/tutors.api'
 import { TEACHING_MODE_LABELS } from '@/features/tutors/tutors.types'
 import type { TutorDetailDTO } from '@/features/tutors/tutors.types'
 import { ApiError, resolveImageUrl } from '@/lib/api'
+import { cn } from '@/lib/cn'
 import { useAsyncData } from '@/lib/useAsyncData'
 import { NotFoundPage } from '@/pages/NotFoundPage'
 
@@ -189,8 +190,7 @@ function ChipListCard({
 }
 
 /**
- * "Request This Tutor", which is the one thing on this page a visitor cannot
- * do anonymously.
+ * The link a visitor uses to ask this tutor for a lesson.
  *
  * Signed in, it goes straight to the request form with this tutor preselected.
  * Signed out, it goes to `/login` carrying the destination in the router's
@@ -202,70 +202,107 @@ function ChipListCard({
  * visitor straight to `state.from`, so the worst case is a brief detour
  * through a page they are immediately forwarded off.
  *
- * It is a `<Link>`, not a `<button>` with `navigate()`: right-clicking to open
- * the request form in a new tab works, and the target is a real href.
+ * Rendered as a `<Link>`, not a `<button>` with `navigate()`: right-clicking to
+ * open the request form in a new tab works, and the target is a real href.
+ *
+ * The two placements are the same link with different wording — "Request This
+ * Tutor" under the header, "Request a Tutor" in the side panel. They are worded
+ * differently on purpose: two links with identical names are two identical
+ * links to a screen-reader user with no way to tell which is which, and the
+ * page is read out loud more often than it is clicked.
  */
-function RequestTutorCta({ tutor }: { tutor: TutorDetailDTO }) {
+function RequestTutorLink({
+  tutor,
+  variant,
+  className,
+}: {
+  tutor: TutorDetailDTO
+  variant: 'primary' | 'panel'
+  className?: string
+}) {
   const { status } = useAuth()
 
   const target = `/request-tutor?tutorId=${encodeURIComponent(tutor.id)}`
   const signedIn = status === 'authenticated'
 
   return (
-    <div className="mt-6 rounded-2xl border border-ink-200 bg-ink-50 p-5">
-      <Link
-        to={signedIn ? target : '/login'}
-        state={signedIn ? undefined : { from: target }}
-        className="inline-flex items-center justify-center gap-2 rounded-lg bg-brand-600 px-5 py-3 text-base font-medium text-white shadow-sm transition-colors hover:bg-brand-700"
-      >
-        Request This Tutor
-      </Link>
-      <p className="mt-3 text-sm text-ink-600">
-        {signedIn
-          ? `Tell us what you need and ${tutor.displayName} will receive your request.`
-          : 'Sign in to request this tutor, and we will take you straight to the form.'}
-      </p>
-    </div>
+    <Link
+      to={signedIn ? target : '/login'}
+      state={signedIn ? undefined : { from: target }}
+      className={cn(
+        'inline-flex items-center justify-center gap-2 rounded-lg font-medium transition-colors',
+        variant === 'primary'
+          ? 'bg-brand-600 px-5 py-3 text-base text-white shadow-sm hover:bg-brand-700'
+          : 'w-full bg-brand-600 px-4 py-2.5 text-sm text-white hover:bg-brand-700',
+        className,
+      )}
+    >
+      {variant === 'primary' ? 'Request This Tutor' : 'Request a Tutor'}
+    </Link>
   )
 }
 
-/** Facts the tutor supplied, as a description list. */
+/**
+ * The facts the tutor supplied, as a description list, in the header.
+ *
+ * A `<dl>` because these are name/value pairs rather than prose, and because
+ * assistive technology announces the term with its definition. Optional facts
+ * (location, rate, languages) are omitted entirely when absent — an empty
+ * "Location" row would be a claim that there is no location, which is not the
+ * same as the tutor not having set one.
+ *
+ * The languages value is a list rather than a comma-joined string: a screen
+ * reader can count and navigate the items, and "Amharic, English" read as one
+ * run of text gives no way to tell how many languages there are.
+ * Requirements: 31.1, 31.3
+ */
 function ProfileFacts({ tutor }: { tutor: TutorDetailDTO }) {
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Details</CardTitle>
-      </CardHeader>
-      <CardBody>
-        <dl className="space-y-3 text-sm">
-          <div>
-            <dt className="font-medium text-ink-500">Teaching mode</dt>
-            <dd className="text-ink-900">{TEACHING_MODE_LABELS[tutor.teachingMode]}</dd>
-          </div>
+    <dl className="mt-4 grid grid-cols-2 gap-x-6 gap-y-3 text-sm sm:max-w-2xl sm:grid-cols-3">
+      <div>
+        <dt className="font-medium text-ink-500">Teaching mode</dt>
+        <dd className="text-ink-900">{TEACHING_MODE_LABELS[tutor.teachingMode]}</dd>
+      </div>
 
-          {tutor.location && (
-            <div>
-              <dt className="font-medium text-ink-500">Location</dt>
-              <dd className="text-ink-900">{tutor.location}</dd>
-            </div>
-          )}
+      {tutor.location ? (
+        <div>
+          <dt className="font-medium text-ink-500">Location</dt>
+          <dd className="text-ink-900">{tutor.location}</dd>
+        </div>
+      ) : null}
 
-          {tutor.hourlyRate !== null && (
-            <div>
-              <dt className="font-medium text-ink-500">Hourly rate</dt>
-              <dd className="text-ink-900">
-                {/*
-                  No currency symbol: the API sends a bare number and no currency
-                  field, so printing "$" or "ETB" here would be inventing data.
-                  A rate of 0 is a real price and is shown like any other.
-                */}
-                {tutor.hourlyRate} per hour
-              </dd>
-            </div>
-          )}
-        </dl>
-      </CardBody>
-    </Card>
+      {tutor.hourlyRate !== null ? (
+        <div>
+          <dt className="font-medium text-ink-500">Hourly rate</dt>
+          <dd className="text-ink-900">
+            {/*
+              No currency symbol: the API sends a bare number and no currency
+              field, so printing "$" or "ETB" here would be inventing data.
+              A rate of 0 is a real price and is shown like any other.
+            */}
+            {tutor.hourlyRate} per hour
+          </dd>
+        </div>
+      ) : null}
+
+      {tutor.languages.length > 0 ? (
+        <div>
+          <dt className="font-medium text-ink-500">Languages</dt>
+          <dd className="mt-1">
+            <ul aria-label="Languages" className="flex flex-wrap gap-1.5">
+              {tutor.languages.map((language) => (
+                <li
+                  key={language}
+                  className="rounded-full bg-ink-100 px-2.5 py-1 text-xs font-medium text-ink-700"
+                >
+                  {language}
+                </li>
+              ))}
+            </ul>
+          </dd>
+        </div>
+      ) : null}
+    </dl>
   )
 }
 
@@ -286,11 +323,18 @@ function TutorProfile({ tutor }: { tutor: TutorDetailDTO }) {
  * Split out from the page's loading, error and 404 states so the markup can be
  * checked on its own, without a fetch and without the shared header and footer
  * standing between a query and the content it is about.
+ *
+ * The order is deliberate: who this is, then the one action a visitor came for,
+ * then the detail. The request call to action is repeated in the side panel
+ * because on a long profile the one under the header is a long scroll away, and
+ * a visitor who has just finished reading is exactly the person who wants it.
+ *
+ * Requirements: 31.1, 31.2, 31.4, 31.5, 31.6, 31.7
  */
 export function TutorProfileView({ tutor }: { tutor: TutorDetailDTO }) {
   return (
     <>
-      <header className="flex flex-col items-start gap-5 sm:flex-row sm:items-center">
+      <header className="flex flex-col items-start gap-5 sm:flex-row sm:items-start">
         <ProfilePhoto displayName={tutor.displayName} photoUrl={tutor.profilePhotoUrl} />
 
         <div className="min-w-0">
@@ -303,17 +347,46 @@ export function TutorProfileView({ tutor }: { tutor: TutorDetailDTO }) {
             {tutor.displayName}
           </h1>
           <p className="mt-2 text-lg text-ink-600">{tutor.headline}</p>
+
+          <ProfileFacts tutor={tutor} />
+
+          <div className="mt-5 flex flex-wrap items-center gap-4">
+            <RequestTutorLink tutor={tutor} variant="primary" />
+            {/*
+              An in-page link rather than another request: subjects are the one
+              thing a visitor checks before deciding to get in touch, and it is
+              already on this page, so a full navigation would be a step back.
+            */}
+            <a
+              href="#subjects"
+              className="text-sm font-medium text-brand-700 underline underline-offset-4 hover:text-brand-800"
+            >
+              View subjects
+            </a>
+          </div>
         </div>
       </header>
 
-      <RequestTutorCta tutor={tutor} />
-
-      <div className="mt-8 flex flex-col gap-6 lg:flex-row lg:items-start">
-        <div className="min-w-0 flex-1 space-y-6">
+      <div className="mt-10 grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_20rem]">
+        <div className="min-w-0 space-y-6">
           <ProseSection
             title="About"
             value={tutor.bio}
             emptyMessage="This tutor has not added a bio yet."
+          />
+          <div id="subjects">
+            <ChipListCard
+              title="Subjects"
+              values={tutor.subjects.map((subject) => subject.name)}
+              listLabel="Subjects"
+              emptyMessage="No subjects listed yet."
+            />
+          </div>
+          <ChipListCard
+            title="Student levels"
+            values={tutor.studentLevels}
+            listLabel="Student levels"
+            emptyMessage="No student levels listed yet."
           />
           <ProseSection
             title="Experience"
@@ -332,26 +405,20 @@ export function TutorProfileView({ tutor }: { tutor: TutorDetailDTO }) {
           />
         </div>
 
-        <aside className="w-full space-y-6 lg:w-72 lg:shrink-0">
-          <ProfileFacts tutor={tutor} />
-          <ChipListCard
-            title="Subjects"
-            values={tutor.subjects.map((subject) => subject.name)}
-            listLabel="Subjects"
-            emptyMessage="No subjects listed yet."
-          />
-          <ChipListCard
-            title="Student levels"
-            values={tutor.studentLevels}
-            listLabel="Student levels"
-            emptyMessage="No student levels listed yet."
-          />
-          <ChipListCard
-            title="Languages"
-            values={tutor.languages}
-            listLabel="Languages"
-            emptyMessage="No languages listed yet."
-          />
+        <aside className="w-full lg:shrink-0">
+          <div className="lg:sticky lg:top-24">
+            <Card>
+              <CardHeader>
+                <CardTitle>Interested in this tutor?</CardTitle>
+              </CardHeader>
+              <CardBody>
+                <RequestTutorLink tutor={tutor} variant="panel" />
+                <p className="mt-3 text-sm text-ink-600">
+                  Tell us what you need to learn and {tutor.displayName} will receive your request.
+                </p>
+              </CardBody>
+            </Card>
+          </div>
         </aside>
       </div>
     </>

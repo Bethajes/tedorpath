@@ -41,6 +41,7 @@ function makeTutor(overrides: Partial<TutorCardDTO> = {}): TutorCardDTO {
     location: 'Addis Ababa',
     hourlyRate: 50,
     studentLevels: ['High School'],
+    languages: ['English', 'Amharic'],
     subjects: [{ id: 'sub-1', name: 'Mathematics', slug: 'mathematics' }],
     createdAt: '2026-09-01T00:00:00.000Z',
     ...overrides,
@@ -213,7 +214,7 @@ describe('search bar (Requirement 8.3)', () => {
     await userEvent.click(screen.getByRole('button', { name: /submit search/i }))
 
     await waitFor(() => {
-      const calls = fetchMock.mock.calls.map(([url]: [string]) => url)
+      const calls = fetchMock.mock.calls.map(([url]) => url)
       expect(calls.some((u: string) => u.includes('q=calculus'))).toBe(true)
     })
   })
@@ -232,7 +233,7 @@ describe('filter panel (Requirement 8.4)', () => {
     await userEvent.selectOptions(subjectSelect, 'mathematics')
 
     await waitFor(() => {
-      const calls = fetchMock.mock.calls.map(([url]: [string]) => url)
+      const calls = fetchMock.mock.calls.map(([url]) => url)
       expect(calls.some((u: string) => u.includes('subject=mathematics'))).toBe(true)
     })
   })
@@ -245,7 +246,7 @@ describe('filter panel (Requirement 8.4)', () => {
     await userEvent.selectOptions(modeSelect, 'ONLINE')
 
     await waitFor(() => {
-      const calls = fetchMock.mock.calls.map(([url]: [string]) => url)
+      const calls = fetchMock.mock.calls.map(([url]) => url)
       expect(calls.some((u: string) => u.includes('mode=ONLINE'))).toBe(true)
     })
   })
@@ -273,7 +274,7 @@ describe('pagination (Requirement 8.5)', () => {
     await userEvent.click(screen.getByRole('button', { name: /next/i }))
 
     await waitFor(() => {
-      const calls = fetchMock.mock.calls.map(([url]: [string]) => url)
+      const calls = fetchMock.mock.calls.map(([url]) => url)
       expect(calls.some((u: string) => u.includes('page=2'))).toBe(true)
     })
   })
@@ -299,7 +300,7 @@ describe('deep-linking', () => {
     renderPage('/tutors?subject=mathematics')
 
     await waitFor(() => {
-      const calls = fetchMock.mock.calls.map(([url]: [string]) => url)
+      const calls = fetchMock.mock.calls.map(([url]) => url)
       expect(calls.some((u: string) => u.includes('subject=mathematics'))).toBe(true)
     })
   })

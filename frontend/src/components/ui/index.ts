@@ -3,5 +3,6 @@ export { Button, type ButtonProps, type ButtonSize, type ButtonVariant } from '.
 export { Card, CardBody, CardHeader, CardTitle, type CardProps } from './Card'
 export { Field, type FieldProps, type FieldRenderProps } from './Field'
 export { Input, type InputProps } from './Input'
+export { Modal, type ModalProps } from './Modal'
 export { Select, type SelectProps } from './Select'
 export { Textarea, type TextareaProps } from './Textarea'

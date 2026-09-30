@@ -11,6 +11,7 @@
 import { getJson } from '@/lib/api'
 
 import type {
+  PublicStats,
   TutorDetailDTO,
   TutorFilters,
   TutorListResponse,
@@ -22,6 +23,7 @@ import {
 } from './tutors.types'
 
 const TUTORS_PATH = '/api/tutors'
+const PUBLIC_STATS_PATH = '/api/public/stats'
 
 /**
  * Appends a filter to the query string only when it actually narrows results.
@@ -69,6 +71,7 @@ export function buildTutorSearchParams(
   setIfPresent(query, 'level', filters.studentLevel)
   setIfPresent(query, 'mode', filters.mode)
   setIfPresent(query, 'location', filters.location)
+  setIfPresent(query, 'language', filters.language)
   setIfNumber(query, 'minRate', filters.minRate)
   setIfNumber(query, 'maxRate', filters.maxRate)
   setIfPresent(query, 'sort', filters.sort)
@@ -114,4 +117,22 @@ export function listTutors(
  */
 export function getTutor(id: string): Promise<TutorDetailDTO> {
   return getJson<TutorDetailDTO>(`${TUTORS_PATH}/${encodeURIComponent(id)}`)
+}
+
+/**
+ * Platform-wide counts for the homepage.
+ *
+ * The endpoint is public and unauthenticated, and the numbers are the same ones
+ * a visitor could infer from browsing the directory, so this is safe to call on
+ * a page anyone can see.
+ *
+ * @throws {ApiError} on a network failure or a server error. Callers should
+ * treat a failure as "counts unknown", not as zero: a zero is a real count that
+ * the frontend renders as honest wording, while an unknown count must never be
+ * substituted for a real one.
+ *
+ * Requirements: 4.2
+ */
+export function getPublicStats(): Promise<PublicStats> {
+  return getJson<PublicStats>(PUBLIC_STATS_PATH)
 }

@@ -228,6 +228,8 @@ export async function submitTutorProfileHandler(req, res) {
               message: result.message,
             },
           })
+        case 'ALREADY_UNDER_REVIEW':
+        case 'ALREADY_APPROVED':
         case 'INVALID_STATUS':
           return res.status(400).json({
             success: false,

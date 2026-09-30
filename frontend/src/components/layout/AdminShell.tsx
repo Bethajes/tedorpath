@@ -8,6 +8,7 @@ import { cn } from '@/lib/cn'
 const ADMIN_LINKS = [
   { to: '/admin', label: 'Dashboard', end: true },
   { to: '/admin/requests', label: 'Tutor Requests', end: false },
+  { to: '/admin/tutors', label: 'Tutors', end: false },
 ]
 
 function linkClass(isActive: boolean) {
@@ -102,6 +103,21 @@ export function AdminBackLink() {
   return (
     <Link to="/admin/requests" className="text-sm font-medium text-brand-700 hover:underline">
       &larr; Back to all requests
+    </Link>
+  )
+}
+
+/**
+ * Back link for the tutor review workspace.
+ *
+ * Separate from AdminBackLink because the tutor queue and the request queue are
+ * different lists — sending an admin back to tutor requests from a tutor profile
+ * would be the wrong place to land them.
+ */
+export function AdminTutorsBackLink() {
+  return (
+    <Link to="/admin/tutors" className="text-sm font-medium text-brand-700 hover:underline">
+      &larr; Back to all tutors
     </Link>
   )
 }

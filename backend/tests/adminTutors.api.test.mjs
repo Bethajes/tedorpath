@@ -394,19 +394,20 @@ describe('PATCH /api/admin/tutors/:id/status', () => {
     assert.equal(stored.profileStatus, 'APPROVED', 'the change must be persisted')
   })
 
-  for (const target of ['REJECTED', 'SUSPENDED']) {
-    it(`applies a ${target} status change`, async () => {
-      const profile = await createProfile({ profileStatus: 'APPROVED' })
+  // REJECTED carries a required reason from the extended workflow, so it is
+  // exercised separately from SUSPENDED below rather than in the same loop.
+  // Requirements: 22.1, 22.4
+  it('applies a SUSPENDED status change', async () => {
+    const profile = await createProfile({ profileStatus: 'APPROVED' })
 
-      const { status, body } = await api(`/api/admin/tutors/${profile.id}/status`, {
-        method: 'PATCH',
-        body: JSON.stringify({ status: target }),
-      })
-
-      assert.equal(status, 200)
-      assert.equal(body.data.profileStatus, target)
+    const { status, body } = await api(`/api/admin/tutors/${profile.id}/status`, {
+      method: 'PATCH',
+      body: JSON.stringify({ status: 'SUSPENDED' }),
     })
-  }
+
+    assert.equal(status, 200)
+    assert.equal(body.data.profileStatus, 'SUSPENDED')
+  })
 
   it('rejects an unknown status with 422 and changes nothing', async () => {
     const profile = await createProfile()
@@ -555,5 +556,495 @@ describe('Requirement 7.5: approval does not imply verification', () => {
 
     const stored = await prisma.tutorProfile.findUnique({ where: { id: profile.id } })
     assert.equal(stored.displayName, 'Original Name')
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Rejection and NEEDS_INFORMATION (Requirement 19.3, 22.1–22.5, 28.2, 28.3)
+// ---------------------------------------------------------------------------
+
+describe('moderation outcomes that must carry an explanation', () => {
+  it('applies a REJECTED status change and persists the reason', async () => {
+    const profile = await createProfile({ profileStatus: 'PENDING_REVIEW' })
+
+    const { status, body } = await api(`/api/admin/tutors/${profile.id}/status`, {
+      method: 'PATCH',
+      body: JSON.stringify({
+        status: 'REJECTED',
+        rejectionReason: 'MISSING_DOCUMENT',
+        adminMessage: 'Please resend your government ID.',
+      }),
+    })
+
+    assert.equal(status, 200)
+    assert.equal(body.data.profileStatus, 'REJECTED')
+    assert.equal(body.data.rejectionReason, 'MISSING_DOCUMENT')
+    assert.equal(body.data.adminMessage, 'Please resend your government ID.')
+
+    const stored = await prisma.tutorProfile.findUnique({ where: { id: profile.id } })
+    assert.equal(stored.profileStatus, 'REJECTED')
+    assert.equal(stored.rejectionReason, 'MISSING_DOCUMENT')
+    assert.equal(stored.adminMessage, 'Please resend your government ID.')
+  })
+
+  it('rejects REJECTED without a rejectionReason with 422 and changes nothing', async () => {
+    const profile = await createProfile({ profileStatus: 'PENDING_REVIEW' })
+
+    const { status, body } = await api(`/api/admin/tutors/${profile.id}/status`, {
+      method: 'PATCH',
+      body: JSON.stringify({ status: 'REJECTED' }),
+    })
+
+    assert.equal(status, 422, 'Requirement 22.1: a rejection must say why')
+    assert.equal(body.error.code, 'REJECTION_REASON_REQUIRED')
+
+    const stored = await prisma.tutorProfile.findUnique({ where: { id: profile.id } })
+    assert.equal(stored.profileStatus, 'PENDING_REVIEW', 'a rejected request must not be applied')
+    assert.equal(stored.rejectionReason, null)
+  })
+
+  it('rejects an unknown rejectionReason category with 422', async () => {
+    const profile = await createProfile()
+
+    const { status, body } = await api(`/api/admin/tutors/${profile.id}/status`, {
+      method: 'PATCH',
+      body: JSON.stringify({ status: 'REJECTED', rejectionReason: 'BECAUSE_I_SAID_SO' }),
+    })
+
+    assert.equal(status, 422)
+    assert.equal(body.error.code, 'INVALID_STATUS')
+  })
+
+  it('accepts REJECTED with a reason and no adminMessage', async () => {
+    const profile = await createProfile()
+
+    const { status, body } = await api(`/api/admin/tutors/${profile.id}/status`, {
+      method: 'PATCH',
+      body: JSON.stringify({ status: 'REJECTED', rejectionReason: 'PROFILE_INCOMPLETE' }),
+    })
+
+    assert.equal(status, 200)
+    assert.equal(body.data.rejectionReason, 'PROFILE_INCOMPLETE')
+    assert.equal(body.data.adminMessage, null)
+  })
+
+  it('applies NEEDS_INFORMATION and persists the admin message', async () => {
+    const profile = await createProfile({ profileStatus: 'PENDING_REVIEW' })
+
+    const { status, body } = await api(`/api/admin/tutors/${profile.id}/status`, {
+      method: 'PATCH',
+      body: JSON.stringify({
+        status: 'NEEDS_INFORMATION',
+        adminMessage: 'Please upload a photo of your teaching certificate.',
+      }),
+    })
+
+    assert.equal(status, 200)
+    assert.equal(body.data.profileStatus, 'NEEDS_INFORMATION')
+    assert.equal(body.data.adminMessage, 'Please upload a photo of your teaching certificate.')
+
+    const stored = await prisma.tutorProfile.findUnique({ where: { id: profile.id } })
+    assert.equal(stored.profileStatus, 'NEEDS_INFORMATION')
+    assert.equal(stored.adminMessage, 'Please upload a photo of your teaching certificate.')
+  })
+
+  it('rejects NEEDS_INFORMATION without an adminMessage with 422 and changes nothing', async () => {
+    const profile = await createProfile({ profileStatus: 'PENDING_REVIEW' })
+
+    const { status, body } = await api(`/api/admin/tutors/${profile.id}/status`, {
+      method: 'PATCH',
+      body: JSON.stringify({ status: 'NEEDS_INFORMATION' }),
+    })
+
+    assert.equal(status, 422, 'Requirement 22.2: asking for information must say what')
+    assert.equal(body.error.code, 'ADMIN_MESSAGE_REQUIRED')
+
+    const stored = await prisma.tutorProfile.findUnique({ where: { id: profile.id } })
+    assert.equal(stored.profileStatus, 'PENDING_REVIEW', 'a rejected request must not be applied')
+  })
+
+  it('treats a whitespace-only adminMessage as absent', async () => {
+    const profile = await createProfile()
+
+    const { status, body } = await api(`/api/admin/tutors/${profile.id}/status`, {
+      method: 'PATCH',
+      body: JSON.stringify({ status: 'NEEDS_INFORMATION', adminMessage: '   ' }),
+    })
+
+    assert.equal(status, 422, 'a message of spaces tells the tutor nothing')
+    assert.equal(body.error.code, 'ADMIN_MESSAGE_REQUIRED')
+  })
+
+  it('does not require either field for APPROVED or SUSPENDED', async () => {
+    for (const target of ['APPROVED', 'SUSPENDED']) {
+      const profile = await createProfile({ profileStatus: 'PENDING_REVIEW' })
+
+      const { status } = await api(`/api/admin/tutors/${profile.id}/status`, {
+        method: 'PATCH',
+        body: JSON.stringify({ status: target }),
+      })
+
+      assert.equal(status, 200, `${target} must not demand a reason or a message`)
+    }
+  })
+
+  it('leaves a previous rejectionReason alone when the admin sends no new one', async () => {
+    const profile = await createProfile({
+      profileStatus: 'REJECTED',
+      rejectionReason: 'MISSING_DOCUMENT',
+      adminMessage: 'Resend your ID.',
+    })
+
+    const { status } = await api(`/api/admin/tutors/${profile.id}/status`, {
+      method: 'PATCH',
+      body: JSON.stringify({ status: 'NEEDS_INFORMATION', adminMessage: 'Still waiting on your ID.' }),
+    })
+
+    assert.equal(status, 200)
+
+    // The new message replaces the old one; the old reason is kept rather than
+    // blanked, so the history of the decision is not destroyed by a later one.
+    const stored = await prisma.tutorProfile.findUnique({ where: { id: profile.id } })
+    assert.equal(stored.adminMessage, 'Still waiting on your ID.')
+    assert.equal(stored.rejectionReason, 'MISSING_DOCUMENT')
+  })
+
+  it('exposes the moderation fields on the detail view', async () => {
+    const profile = await createProfile({
+      applicationReference: 'TT-2026-000042',
+      rejectionReason: 'OTHER',
+      adminMessage: 'Not a fit for the subjects listed.',
+      adminNotes: 'Spoke to the tutor on the phone.',
+      verificationChecklist: { govIdReceived: true, identityReviewed: true },
+      verifiedAt: new Date('2026-02-03T04:05:06.000Z'),
+    })
+
+    const { status, body } = await api(`/api/admin/tutors/${profile.id}`)
+
+    assert.equal(status, 200)
+    assert.equal(body.data.applicationReference, 'TT-2026-000042')
+    assert.equal(body.data.rejectionReason, 'OTHER')
+    assert.equal(body.data.adminMessage, 'Not a fit for the subjects listed.')
+    assert.equal(body.data.adminNotes, 'Spoke to the tutor on the phone.')
+    assert.equal(body.data.verificationChecklist.govIdReceived, true)
+    assert.equal(body.data.verifiedAt, '2026-02-03T04:05:06.000Z')
+  })
+
+  it('lists profiles filtered by NEEDS_INFORMATION', async () => {
+    const profile = await createProfile({ profileStatus: 'NEEDS_INFORMATION' })
+
+    const { status, body } = await api('/api/admin/tutors?status=NEEDS_INFORMATION&limit=100')
+
+    assert.equal(status, 200, 'the status filter must accept every real enum value')
+    assert.ok(
+      body.data.items.some((item) => item.id === profile.id),
+      'a NEEDS_INFORMATION profile must be reachable in the moderation queue',
+    )
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Moderation queue search (Requirement 23.4)
+// ---------------------------------------------------------------------------
+
+describe('GET /api/admin/tutors — search', () => {
+  it('matches on display name, case-insensitively', async () => {
+    const match = await createProfile({ displayName: 'Uniquehandle Featherstone' })
+    await createProfile({ displayName: 'Someone Else Entirely' })
+
+    const { status, body } = await api('/api/admin/tutors?limit=100&q=uniquehandle')
+
+    assert.equal(status, 200)
+    const ids = body.data.items.map((item) => item.id)
+    assert.ok(ids.includes(match.id), 'a case-different name must still match')
+  })
+
+  it('matches on headline', async () => {
+    const match = await createProfile({ headline: 'Quantum Mechanics specialist' })
+
+    const { body } = await api('/api/admin/tutors?limit=100&q=quantum')
+    const ids = body.data.items.map((item) => item.id)
+
+    assert.ok(ids.includes(match.id), 'an admin searches by what the tutor teaches')
+  })
+
+  it('matches on the account email, so a colleague can find the applicant', async () => {
+    const profile = await createProfile()
+    const email = await prisma.user.findUnique({ where: { id: profile.userId } })
+
+    const { body } = await api(`/api/admin/tutors?limit=100&q=${encodeURIComponent(email.email)}`)
+    const ids = body.data.items.map((item) => item.id)
+
+    assert.ok(ids.includes(profile.id), 'the applicant may be known by their account email')
+  })
+
+  it('returns only matching profiles', async () => {
+    const match = await createProfile({ displayName: 'Distinguishable One' })
+    const other = await createProfile({ displayName: 'Distinguishable Two' })
+
+    const { body } = await api('/api/admin/tutors?limit=100&q=Distinguishable%20One')
+    const ids = body.data.items.map((item) => item.id)
+
+    assert.ok(ids.includes(match.id))
+    assert.ok(!ids.includes(other.id), 'a partial match must not pull in a different profile')
+  })
+
+  it('applies the search and the status filter together', async () => {
+    const pending = await createProfile({
+      displayName: 'Combined Filter Person',
+      profileStatus: 'PENDING_REVIEW',
+    })
+    const approved = await createProfile({
+      displayName: 'Combined Filter Person',
+      profileStatus: 'APPROVED',
+    })
+
+    const { body } = await api('/api/admin/tutors?limit=100&q=Combined%20Filter%20Person&status=PENDING_REVIEW')
+    const ids = body.data.items.map((item) => item.id)
+
+    assert.ok(ids.includes(pending.id), 'the pending profile matches both filters')
+    assert.ok(!ids.includes(approved.id), 'an approved profile is excluded by the status filter')
+  })
+
+  it('ignores a blank search term', async () => {
+    const profile = await createProfile()
+
+    const { body } = await api('/api/admin/tutors?limit=100&q=')
+    const ids = body.data.items.map((item) => item.id)
+
+    assert.ok(
+      ids.includes(profile.id),
+      'an empty q must behave as no filter, not as a search matching nothing',
+    )
+  })
+
+  it('rejects an over-long search term with 400', async () => {
+    const { status } = await api(`/api/admin/tutors?q=${'x'.repeat(101)}`)
+    assert.equal(status, 400)
+  })
+
+  it('returns an empty page when nothing matches', async () => {
+    const { status, body } = await api('/api/admin/tutors?limit=100&q=zzzznotarealnamezzzz')
+
+    assert.equal(status, 200)
+    assert.deepEqual(body.data.items, [])
+    assert.equal(body.data.pagination.total, 0)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// PATCH /api/admin/tutors/:id/verification (Requirement 26.3, 27.3–27.5)
+// ---------------------------------------------------------------------------
+
+describe('PATCH /api/admin/tutors/:id/verification', () => {
+  it('requires the admin token', async () => {
+    const profile = await createProfile()
+
+    const { status, body } = await api(`/api/admin/tutors/${profile.id}/verification`, {
+      method: 'PATCH',
+      noAuth: true,
+      body: JSON.stringify({ adminNotes: 'sneaky' }),
+    })
+
+    assert.equal(status, 401)
+    assert.equal(body.success, false)
+
+    const stored = await prisma.tutorProfile.findUnique({ where: { id: profile.id } })
+    assert.equal(stored.adminNotes, null, 'an unauthenticated write must change nothing')
+  })
+
+  it('updates verificationStatus without changing profileStatus', async () => {
+    const profile = await createProfile({
+      profileStatus: 'PENDING_REVIEW',
+      verificationStatus: 'UNVERIFIED',
+    })
+
+    const { status, body } = await api(`/api/admin/tutors/${profile.id}/verification`, {
+      method: 'PATCH',
+      body: JSON.stringify({ verificationStatus: 'DOCUMENTS_RECEIVED' }),
+    })
+
+    assert.equal(status, 200)
+    assert.equal(body.data.verificationStatus, 'DOCUMENTS_RECEIVED')
+    assert.equal(body.data.profileStatus, 'PENDING_REVIEW', 'Requirement 27.3: status is not touched')
+
+    const stored = await prisma.tutorProfile.findUnique({ where: { id: profile.id } })
+    assert.equal(stored.verificationStatus, 'DOCUMENTS_RECEIVED')
+    assert.equal(stored.profileStatus, 'PENDING_REVIEW')
+  })
+
+  it('saves adminNotes', async () => {
+    const profile = await createProfile()
+
+    const { status, body } = await api(`/api/admin/tutors/${profile.id}/verification`, {
+      method: 'PATCH',
+      body: JSON.stringify({ adminNotes: 'Government ID received. Certificate pending.' }),
+    })
+
+    assert.equal(status, 200)
+    assert.equal(body.data.adminNotes, 'Government ID received. Certificate pending.')
+
+    const stored = await prisma.tutorProfile.findUnique({ where: { id: profile.id } })
+    assert.equal(stored.adminNotes, 'Government ID received. Certificate pending.')
+  })
+
+  it('saves the verificationChecklist', async () => {
+    const profile = await createProfile()
+
+    const checklist = {
+      govIdReceived: true,
+      identityReviewed: true,
+      educationDocReceived: false,
+      educationReviewed: false,
+      certificateReceived: true,
+      qualificationReviewed: false,
+    }
+
+    const { status, body } = await api(`/api/admin/tutors/${profile.id}/verification`, {
+      method: 'PATCH',
+      body: JSON.stringify({ verificationChecklist: checklist }),
+    })
+
+    assert.equal(status, 200)
+    assert.deepEqual(body.data.verificationChecklist, checklist)
+
+    const stored = await prisma.tutorProfile.findUnique({ where: { id: profile.id } })
+    assert.deepEqual(stored.verificationChecklist, checklist)
+  })
+
+  it('accepts a partial checklist', async () => {
+    const profile = await createProfile()
+
+    const { status } = await api(`/api/admin/tutors/${profile.id}/verification`, {
+      method: 'PATCH',
+      body: JSON.stringify({ verificationChecklist: { govIdReceived: true } }),
+    })
+
+    assert.equal(status, 200, 'an admin should be able to tick one box and save')
+
+    const stored = await prisma.tutorProfile.findUnique({ where: { id: profile.id } })
+    assert.deepEqual(stored.verificationChecklist, { govIdReceived: true })
+  })
+
+  it('sets verifiedAt when the admin records a VERIFIED status', async () => {
+    const profile = await createProfile({ verificationStatus: 'UNVERIFIED' })
+
+    const { status, body } = await api(`/api/admin/tutors/${profile.id}/verification`, {
+      method: 'PATCH',
+      body: JSON.stringify({ verificationStatus: 'VERIFIED' }),
+    })
+
+    assert.equal(status, 200)
+    assert.ok(body.data.verifiedAt, 'a VERIFIED result must be dated')
+
+    const stored = await prisma.tutorProfile.findUnique({ where: { id: profile.id } })
+    assert.ok(stored.verifiedAt instanceof Date)
+  })
+
+  it('leaves verifiedAt alone for a note-only edit', async () => {
+    const stamp = new Date('2026-01-01T00:00:00.000Z')
+    const profile = await createProfile({ verifiedAt: stamp })
+
+    const { status } = await api(`/api/admin/tutors/${profile.id}/verification`, {
+      method: 'PATCH',
+      body: JSON.stringify({ adminNotes: 'Just a note.' }),
+    })
+
+    assert.equal(status, 200)
+
+    const stored = await prisma.tutorProfile.findUnique({ where: { id: profile.id } })
+    assert.equal(stored.verifiedAt.toISOString(), stamp.toISOString())
+  })
+
+  it('honours an explicit verifiedAt', async () => {
+    const profile = await createProfile()
+
+    const { status, body } = await api(`/api/admin/tutors/${profile.id}/verification`, {
+      method: 'PATCH',
+      body: JSON.stringify({ verifiedAt: '2026-03-04T05:06:07.000Z' }),
+    })
+
+    assert.equal(status, 200)
+    assert.equal(body.data.verifiedAt, '2026-03-04T05:06:07.000Z')
+  })
+
+  it('rejects an unknown checklist key', async () => {
+    const profile = await createProfile()
+
+    const { status } = await api(`/api/admin/tutors/${profile.id}/verification`, {
+      method: 'PATCH',
+      body: JSON.stringify({ verificationChecklist: { passportPhotoReceived: true } }),
+    })
+
+    assert.equal(status, 400, 'a typo must be refused rather than silently dropped')
+
+    const stored = await prisma.tutorProfile.findUnique({ where: { id: profile.id } })
+    assert.equal(stored.verificationChecklist, null)
+  })
+
+  it('rejects a non-boolean checklist value', async () => {
+    const profile = await createProfile()
+
+    const { status } = await api(`/api/admin/tutors/${profile.id}/verification`, {
+      method: 'PATCH',
+      body: JSON.stringify({ verificationChecklist: { govIdReceived: 'yes' } }),
+    })
+
+    assert.equal(status, 400)
+  })
+
+  it('rejects an unknown verificationStatus', async () => {
+    const profile = await createProfile()
+
+    const { status } = await api(`/api/admin/tutors/${profile.id}/verification`, {
+      method: 'PATCH',
+      body: JSON.stringify({ verificationStatus: 'TRUSTED' }),
+    })
+
+    assert.equal(status, 400)
+  })
+
+  it('rejects an empty body', async () => {
+    const profile = await createProfile()
+
+    const { status } = await api(`/api/admin/tutors/${profile.id}/verification`, {
+      method: 'PATCH',
+      body: JSON.stringify({}),
+    })
+
+    assert.equal(status, 400, 'a no-op request is a mistake worth reporting')
+  })
+
+  it('refuses profileStatus as a field', async () => {
+    const profile = await createProfile({ profileStatus: 'PENDING_REVIEW' })
+
+    const { status } = await api(`/api/admin/tutors/${profile.id}/verification`, {
+      method: 'PATCH',
+      body: JSON.stringify({ profileStatus: 'APPROVED' }),
+    })
+
+    assert.equal(status, 400, 'the verification endpoint must not be a back door to approval')
+
+    const stored = await prisma.tutorProfile.findUnique({ where: { id: profile.id } })
+    assert.equal(stored.profileStatus, 'PENDING_REVIEW')
+  })
+
+  it('returns 404 for an unknown profile id', async () => {
+    const { status, body } = await api(
+      `/api/admin/tutors/${crypto.randomUUID()}/verification`,
+      { method: 'PATCH', body: JSON.stringify({ adminNotes: 'nothing to update' }) },
+    )
+
+    assert.equal(status, 404)
+    assert.equal(body.error.code, 'NOT_FOUND')
+  })
+
+  it('returns 400 for a malformed profile id', async () => {
+    const { status } = await api(`/api/admin/tutors/not-a-uuid/verification`, {
+      method: 'PATCH',
+      body: JSON.stringify({ adminNotes: 'nothing to update' }),
+    })
+
+    assert.equal(status, 400)
   })
 })

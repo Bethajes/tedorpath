@@ -1,0 +1,60 @@
+/* ==========================================================================
+   The wireframe globe — a hub pulsing in the accent colour, and one connection
+   carrying a travelling highlight.
+
+   Two animations, both slow enough to be ambient: a 7s pulse on Ethiopia and a
+   11s trace along a single line. Nothing on a globe rotates, because a rotating
+   globe is a stock "worldwide reach" animation and this section is specifically
+   not claiming worldwide reach — it is claiming that the platform is reachable
+   from outside Ethiopia, and a slowly breathing node says that without the
+   flight-deck-entertainment tone.
+
+   Reduced motion: index.css collapses durations globally; the explicit block
+   below stops both outright so the diagram renders still, which is the more
+   informative state for someone who asked for less movement.
+   ========================================================================== */
+
+.globe-pulse {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: globe-pulse 7s cubic-bezier(0.22, 1, 0.36, 1) infinite;
+}
+
+.globe-trace {
+  animation: globe-trace 11s cubic-bezier(0.4, 0, 0.4, 1) infinite;
+}
+
+@keyframes globe-pulse {
+  0% {
+    transform: scale(0.7);
+    opacity: 0.85;
+  }
+  70%,
+  100% {
+    transform: scale(2.6);
+    opacity: 0;
+  }
+}
+
+@keyframes globe-trace {
+  from {
+    stroke-dashoffset: 104;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .globe-pulse,
+  .globe-trace {
+    animation: none;
+  }
+
+  /* The trace is only meaningful while it is moving; frozen at offset 0 it is a
+     short stub on the line that reads as an artefact. */
+  .globe-trace {
+    stroke-dasharray: none;
+    opacity: 0.45;
+  }
+}

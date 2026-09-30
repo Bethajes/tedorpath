@@ -80,6 +80,30 @@ export function getMyTutorProfile(): Promise<MyTutorProfile> {
 }
 
 /**
+ * Create the DRAFT profile a first-time applicant does not have yet.
+ *
+ * The photo picker on step 1 uploads straight away, and the upload endpoint
+ * writes the photo onto an existing profile — so without a profile there is
+ * nothing to attach it to and the upload fails with "Start your tutor profile
+ * before adding a photo." Creating the DRAFT during the load phase, while the
+ * page already shows a loading state, means the photo always has somewhere to
+ * go.
+ *
+ * These three fields are placeholders the applicant overwrites on step 1; they
+ * exist only to satisfy the non-null columns, and are replaced on the first
+ * Next. `bio` is deliberately explicit rather than empty so the applicant never
+ * sees a blank-looking preview of their own profile.
+ * Requirements: 17.1, 17.2
+ */
+export function createStarterProfile(displayName: string): Promise<MyTutorProfile> {
+  return postJson<MyTutorProfile>(PROFILE_PATH, {
+    displayName: displayName.trim() || 'Tutor',
+    headline: 'Tutor',
+    bio: 'Profile in progress.',
+  })
+}
+
+/**
  * Submit the authenticated user's profile for admin review.
  * Returns 422 with missing field list when completeness requirements are not met.
  * Requirement 6.6, 6.7

@@ -26,6 +26,17 @@ export const listTutorsQuerySchema = z.object({
   /** Case-insensitive contains on location */
   location: z.string().trim().max(120).optional(),
 
+  /**
+   * Teaching language — case-insensitive match against a tutor's `languages`
+   * array.
+   *
+   * Free text rather than an enum because the array is tutor-authored: the
+   * onboarding form accepts a comma-separated list, so the set of values in the
+   * database is whatever tutors type and a fixed enum would silently exclude
+   * everyone who wrote "amharic" in a different case. Requirements: 30.2, 30.4
+   */
+  language: z.string().trim().max(50).optional(),
+
   /** Minimum hourly rate */
   minRate: z
     .string()

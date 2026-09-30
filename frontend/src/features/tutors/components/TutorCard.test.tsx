@@ -58,6 +58,12 @@ const tutorArbitrary: fc.Arbitrary<TutorCardDTO> = fc.record({
     { nil: null },
   ),
   studentLevels: fc.array(fc.constantFrom('High School', 'University'), { minLength: 1 }),
+  // Tutor-authored free text, so the generator includes multi-language and
+  // empty cases — the card has to cope with both (Requirement 30.6).
+  languages: fc.array(
+    fc.string({ minLength: 2, maxLength: 18 }).filter((value) => value.trim().length > 0),
+    { maxLength: 4 },
+  ),
   createdAt: fc.constant(new Date('2024-01-01T00:00:00.000Z').toISOString()),
   subjects: fc.array(
     fc.record({
@@ -143,6 +149,7 @@ describe('TutorCard (Requirement 9.2 — placeholder avatar)', () => {
       location: null,
       hourlyRate: null,
       studentLevels: ['University'],
+      languages: [],
       createdAt: '2024-01-01T00:00:00.000Z',
       subjects: [{ id: 's1', name: 'Mathematics', slug: 'mathematics' }],
     }
@@ -168,6 +175,7 @@ describe('TutorCard (Requirement 9.2 — placeholder avatar)', () => {
       location: null,
       hourlyRate: null,
       studentLevels: ['University'],
+      languages: [],
       createdAt: '2024-01-01T00:00:00.000Z',
       subjects: [{ id: 's1', name: 'Mathematics', slug: 'mathematics' }],
     }
@@ -196,6 +204,7 @@ describe('TutorCard (Requirement 9.1 — conditional fields)', () => {
     location: null,
     hourlyRate: null,
     studentLevels: ['University'],
+    languages: [],
     createdAt: '2024-01-01T00:00:00.000Z',
     subjects: [{ id: 's1', name: 'Mathematics', slug: 'mathematics' }],
   }
@@ -250,5 +259,151 @@ describe('TutorCard (Requirement 9.1 — conditional fields)', () => {
     })
 
     expect(text).not.toContain('more')
+  })
+})
+
+// ---------------------------------------------------------------------------
+// The row / grid split.
+//
+// The directory renders a wide horizontal card; the homepage featured section
+// renders three across. Both must carry the same information, so the properties
+// above are re-run against the grid variant rather than trusted by inspection.
+// ---------------------------------------------------------------------------
+
+describe('TutorCard — the grid variant carries the same information', () => {
+  function renderGridCard(tutor: TutorCardDTO) {
+    const { container } = render(
+      <MemoryRouter>
+        <TutorCard tutor={tutor} variant="grid" />
+      </MemoryRouter>,
+    )
+    return { container, text: container.textContent ?? '', ...within(container) }
+  }
+
+  it('shows the identifying and actionable fields in both variants', () => {
+    const tutor: TutorCardDTO = {
+      id: '33333333-3333-4333-8333-333333333333',
+      displayName: 'Ada Lovelace',
+      headline: 'Mathematics and programming tutor',
+      bio: 'I help students find the method behind the problem.',
+      profilePhotoUrl: null,
+      teachingMode: 'BOTH',
+      location: 'Addis Ababa',
+      hourlyRate: 25,
+      studentLevels: ['High School'],
+      languages: ['English', 'Amharic'],
+      subjects: [
+        { id: 's1', name: 'Mathematics', slug: 'mathematics' },
+        { id: 's2', name: 'Programming', slug: 'programming' },
+      ],
+      createdAt: '2024-03-01T00:00:00.000Z',
+    }
+
+    const row = renderCard(tutor)
+    const grid = renderGridCard(tutor)
+
+    // What a visitor needs in order to choose: who, what they teach, what they
+    // teach it in, where they are, what it costs, and how to go further.
+    for (const expected of [
+      'Ada Lovelace',
+      'Mathematics and programming tutor',
+      'Mathematics',
+      'Programming',
+      'English',
+      'Online & in person',
+      'Addis Ababa',
+      '25 per hour',
+      'View Profile',
+    ]) {
+      expect(row.text, `row variant is missing "${expected}"`).toContain(expected)
+      expect(grid.text, `grid variant is missing "${expected}"`).toContain(expected)
+    }
+
+    expect(grid.getByRole('link', { name: /view profile/i })).toHaveAttribute(
+      'href',
+      `/tutors/${tutor.id}`,
+    )
+  })
+
+  it('gives the row variant the bio excerpt and join date the grid variant has no room for', () => {
+    // The grid variant is three cards across, so it carries the summary only.
+    // Anything dropped there is still on the profile page, and nothing dropped is
+    // the sort of claim that would mislead — a bio and a join date are context,
+    // not a differentiator.
+    const tutor: TutorCardDTO = {
+      id: '66666666-6666-4666-8666-666666666666',
+      displayName: 'Grace Hopper',
+      headline: 'Programming tutor',
+      bio: 'I teach debugging as a habit, not a rescue.',
+      profilePhotoUrl: null,
+      teachingMode: 'ONLINE',
+      location: 'Remote',
+      hourlyRate: 40,
+      studentLevels: ['University'],
+      languages: ['English'],
+      createdAt: '2024-03-01T00:00:00.000Z',
+      subjects: [{ id: 's1', name: 'Programming', slug: 'programming' }],
+    }
+
+    const row = renderCard(tutor)
+    const grid = renderGridCard(tutor)
+
+    expect(row.text).toContain('I teach debugging as a habit')
+    expect(row.text).toMatch(/on tedor since/i)
+
+    expect(grid.text).not.toContain('I teach debugging as a habit')
+    expect(grid.text).not.toMatch(/on tedor since/i)
+  })
+
+  it('never renders a fabricated metric in the grid variant either', async () => {
+    await fc.assert(
+      fc.asyncProperty(tutorArbitrary, async (tutor) => {
+        const { text } = renderGridCard(tutor)
+
+        for (const pattern of FABRICATED_METRIC_PATTERNS) {
+          expect(text).not.toMatch(pattern)
+        }
+      }),
+      { numRuns: 100 },
+    )
+  })
+
+  it('omits the join date when createdAt is not a real timestamp', () => {
+    const { text } = renderCard({
+      id: '44444444-4444-4444-8444-444444444444',
+      displayName: 'Bad Date',
+      headline: 'Tutor',
+      bio: null,
+      profilePhotoUrl: null,
+      teachingMode: 'ONLINE',
+      location: null,
+      hourlyRate: null,
+      studentLevels: ['University'],
+      languages: ['English'],
+      createdAt: 'not-a-date',
+      subjects: [],
+    })
+
+    expect(text).not.toMatch(/on tedor since/i)
+    expect(text).not.toMatch(/invalid/i)
+  })
+
+  it('shows the join date when createdAt is valid', () => {
+    const { text } = renderCard({
+      id: '55555555-5555-4555-8555-555555555555',
+      displayName: 'Real Date',
+      headline: 'Tutor',
+      bio: null,
+      profilePhotoUrl: null,
+      teachingMode: 'ONLINE',
+      location: null,
+      hourlyRate: null,
+      studentLevels: ['University'],
+      languages: ['English'],
+      createdAt: '2024-03-01T00:00:00.000Z',
+      subjects: [],
+    })
+
+    expect(text).toMatch(/on tedor since/i)
   })
 })
