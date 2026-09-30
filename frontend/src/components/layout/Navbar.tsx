@@ -11,6 +11,13 @@ interface NavItem {
   label: string
   /** Anchor targets live on another page; they should not render as "current". */
   anchor?: boolean
+  /**
+   * Stable identity for the list. Defaults to `to`, which is only safe while
+   * every entry points somewhere different — two entries may share a
+   * destination now that "Subjects" goes to the directory like "Find a Tutor"
+   * does. Labels are unique, so they are used as the key instead.
+   */
+  key?: string
 }
 
 /**
@@ -18,11 +25,14 @@ interface NavItem {
  * never disagree about what navigation exists (Requirement 1.3).
  */
 const NAV_ITEMS: NavItem[] = [
-  { to: '/tutors', label: 'Find a Tutor' },
-  { to: '/#how-it-works', label: 'How It Works', anchor: true },
-  { to: '/#subjects', label: 'Subjects', anchor: true },
-  { to: '/become-a-tutor', label: 'Become a Tutor' },
-  { to: '/about', label: 'About' },
+  { to: '/tutors', label: 'Find a Tutor', key: 'find-a-tutor' },
+  { to: '/#how-it-works', label: 'How It Works', anchor: true, key: 'how-it-works' },
+  // The homepage's subject index is gone, so this goes to the directory, where
+  // subjects are a filter rather than a page of their own. Left pointing at
+  // /#subjects it would scroll a viewport and stop.
+  { to: '/tutors', label: 'Subjects', key: 'subjects' },
+  { to: '/become-a-tutor', label: 'Become a Tutor', key: 'become-a-tutor' },
+  { to: '/about', label: 'About', key: 'about' },
 ]
 
 /**

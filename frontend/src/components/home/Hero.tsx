@@ -2,7 +2,7 @@ import { useRef } from 'react'
 import { Link } from 'react-router-dom'
 
 import { Container } from '@/components/layout/PageShell'
-import { TedorLearningGraphic } from './TedorLearningGraphic'
+import { HeroVisual } from './HeroVisual'
 import { TutorSearchCard } from './TutorSearchCard'
 
 /**
@@ -80,9 +80,15 @@ export function Hero() {
         </div>
 
         <div className="lg:pl-2">
-          {/* Unchanged: all of the animation and reduced-motion handling lives
-              inside the graphic (Requirement 2.9). */}
-          <TedorLearningGraphic parallaxHost={sectionRef} />
+          {/*
+            The right-hand composition: the learning-path graphic, unchanged and
+            still the subject, arranged with the human frames around it.
+            `HeroVisual` passes the section ref straight through, so the parallax
+            still reads the pointer anywhere in the hero — as does all of the
+            animation and reduced-motion handling inside the graphic itself
+            (Requirements 2.6, 2.9).
+          */}
+          <HeroVisual parallaxHost={sectionRef} />
         </div>
       </Container>
     </section>

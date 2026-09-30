@@ -144,17 +144,20 @@ const statsArbitrary: fc.Arbitrary<PublicStats> = fc.record({
   countries: fc.integer({ min: 0, max: 100_000 }),
 })
 
-/** Resolves once the two data-driven sections have both settled. */
-async function waitForPageData(stats: PublicStats, tutors: TutorCardDTO[]) {
+/**
+ * Resolves once the page's data-driven sections have settled.
+ *
+ * `tutors` is no longer asserted here: the homepage does not list profiles, so
+ * the directory response now only drives the tutor pips in
+ * LearnerTutorConnection, which renders `<a>` elements rather than cards.
+ * Waiting on the stats value is enough to know the page has finished its
+ * fetches.
+ */
+async function waitForPageData(stats: PublicStats) {
   await waitFor(() => {
     const value = screen.queryByTestId('stat-value-approvedTutors')?.textContent ?? ''
     expect(value).toBe(stats.approvedTutors > 0 ? String(stats.approvedTutors) : 'Growing')
   })
-  if (tutors.length > 0) {
-    await waitFor(() => {
-      expect(document.querySelectorAll('article')).toHaveLength(tutors.length)
-    })
-  }
 }
 
 // ---------------------------------------------------------------------------
@@ -172,11 +175,11 @@ describe('HomePage — Property 1: exactly one h1', () => {
           stubPage({ tutors, stats })
           const { container, unmount } = renderHomePage()
 
-          await waitForPageData(stats, tutors)
+    await waitForPageData(stats)
 
-          // The whole document, not just a section: the Navbar, every section
-          // and the Footer all live in the same tree.
-          expect(container.querySelectorAll('h1')).toHaveLength(1)
+    // The whole document, not just a section: the Navbar, every section
+    // and the Footer all live in the same tree.
+    expect(container.querySelectorAll('h1')).toHaveLength(1)
           expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1)
 
           unmount()
@@ -201,15 +204,10 @@ describe('HomePage — Property 1: exactly one h1', () => {
     })
     const { container } = renderHomePage()
 
-    await waitForPageData(
-      { approvedTutors: 99, subjects: 40, universities: 6, countries: 5 },
-      [
-        makeTutor(),
-        makeTutor({ id: crypto.randomUUID(), displayName: 'Second Tutor' }),
-      ],
-    )
+    await waitForPageData({ approvedTutors: 99, subjects: 40, universities: 6, countries: 5 })
 
-    // The added TutorCards bring their own h3s; they must not introduce an h1.
+    // The page's many h2/h3 sections must not introduce a second h1, whatever
+    // the API returned.
     expect(container.querySelectorAll('h1')).toHaveLength(1)
     expect(container.querySelectorAll('h3').length).toBeGreaterThan(0)
   })
@@ -281,7 +279,6 @@ describe('HomePage — section order', () => {
       'university-trust-heading',
       'stats-heading',
       'verification-steps-heading',
-      'featured-tutors-heading',
       'testimonials-heading',
       'learning-journey-heading',
       'connection-heading',
@@ -295,10 +292,33 @@ describe('HomePage — section order', () => {
     stubPage({ tutors: [], stats: statsResponse() })
     const { container } = renderHomePage()
 
-    // Every in-page link on the site resolves to one of these. If a section is
-    // renamed without updating the links, this fails.
+    // Derived from the rendered chrome rather than hardcoded, so removing a
+    // section and forgetting the link that pointed at it fails here instead of
+    // shipping a link that scrolls nowhere.
+    const anchors = Array.from(container.querySelectorAll('header a[href^="#"], footer a[href^="#"]'))
+      .map((link) => link.getAttribute('href') ?? '')
+      .filter((href) => href.startsWith('#') && href.length > 1)
+
+    expect(anchors.length).toBeGreaterThan(0)
+    for (const anchor of anchors) {
+      expect(container.querySelector(anchor), `no target for ${anchor}`).not.toBeNull()
+    }
+
+    // Still the one the navbar's "How It Works" entry resolves to.
     expect(container.querySelector('#how-it-works')).not.toBeNull()
-    expect(container.querySelector('#subjects')).not.toBeNull()
+  })
+
+  it('no longer offers a homepage subject index, and nothing links to one', () => {
+    stubPage({ tutors: [], stats: statsResponse() })
+    const { container } = renderHomePage()
+
+    expect(container.querySelector('#subjects')).toBeNull()
+    expect(screen.queryByRole('heading', { name: /what do you want to learn/i })).toBeNull()
+
+    // A dangling '/#subjects' would still resolve as a valid route, so it has
+    // to be checked as a string.
+    const hrefs = Array.from(container.querySelectorAll('a[href]')).map((a) => a.getAttribute('href'))
+    expect(hrefs).not.toContain('/#subjects')
   })
 })
 
@@ -346,14 +366,17 @@ describe('HomePage — every link resolves to a real route', () => {
     }
   })
 
-  it('links tutor cards to a /tutors/:id profile route', async () => {
+  it('links a real tutor to their /tutors/:id profile route', async () => {
     const tutor = makeTutor({ id: '22222222-2222-4222-8222-222222222222' })
     stubPage({ tutors: [tutor], stats: statsResponse() })
     const { container } = renderHomePage()
 
-    // The featured cards arrive after the directory request resolves.
+    // The homepage no longer lists profile cards, but the tutors it does show
+    // come from the same directory response, so their links still have to
+    // resolve to a real profile route. LearnerTutorConnection labels them with
+    // the first name only.
     await waitFor(() => {
-      expect(container.querySelectorAll('article')).toHaveLength(1)
+      expect(screen.getByRole('link', { name: /^alice/i })).toBeInTheDocument()
     })
 
     const hrefs = Array.from(container.querySelectorAll('a[href]')).map((a) => a.getAttribute('href'))
