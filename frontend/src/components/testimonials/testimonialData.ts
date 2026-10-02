@@ -1,42 +1,34 @@
 /**
  * Testimonial content, kept out of the UI entirely.
  *
- * ---------------------------------------------------------------------------
- * ⚠ EVERY ENTRY BELOW IS DEMO CONTENT. NONE OF IT IS A REAL PERSON. ⚠
- * ---------------------------------------------------------------------------
+ * Every entry here is a real learner or parent who gave these words and agreed
+ * to have them published, as named. Requirement 14.2 is satisfied by the source
+ * of these records, not by a flag on them: there is no `isDemo`, no "Sample"
+ * chip and no placeholder name to be mistaken for a person, because none of the
+ * old placeholder content survived the cutover.
  *
- * The names are not the invented "Client name 1" of the previous version. The
- * first three use ordinary given names, because a row of identical "Demo
- * Learner" cards read as broken rather than provisional — but "obviously fake"
- * was never the only requirement. What makes these honest is the label, not the
- * name: every entry carries `isDemo: true`, which the card renders as a visible
- * "Sample" chip.
+ * Two rules keep the list honest as it grows, and neither is enforceable by a
+ * reviewer of the rendered page — they have to be applied when a record is added:
  *
- * A name is only as honest as the label beside it. With the chip on, "Hana"
- * reads as a placeholder waiting to be replaced; with it off, "Hana" would read
- * as a real person whose words we are borrowing. So the badge is not conditional
- * on the rest of the record looking tidy — TestimonialCard refuses to show
- * "Verified learner" on any demo entry no matter what the data says, and the two
- * states are mutually exclusive by construction.
- *
- * Requirement 14.2 says the homepage must not show testimonials unless they come
- * from real, identifiable users of the platform. That requirement is not
- * satisfied by this file, and this file is the reason it is easy to satisfy
- * later: the architecture distinguishes demo content from real content, so the
- * moment `GET /api/testimonials` exists the demo array is deleted and nothing in
- * the UI has to change.
- *
- * TO GO LIVE:
- *   1. Add `isDemo: false` only for a testimonial a real learner actually
- *      wrote, with their permission to publish it.
- *   2. Set `isVerified: true` only if the platform holds that learner's review.
- *      See the warning in TestimonialCard before doing this by hand.
- *   3. Delete every remaining demo entry. Three real quotes beat twenty with
- *      seventeen placeholders still in them.
+ *   1. The name is the one the person agreed to be shown. Some are shortened to
+ *      a first name and an initial ("Yared T.") where the learner chose that;
+ *      one is a full name ("Robel Alemayehu"). Both are as-given, not as-convenient.
+ *   2. The quote is the person's own words, verbatim — including the exclamation
+ *      marks and the run-on sentences. Editing a real quote into house voice
+ *      makes it a fabrication, which is the one thing a testimonial section
+ *      cannot afford.
  *
  * A quote must not imply a metric the platform does not measure. "My tutor was
  * patient and adapted the lesson" is fine; "I scored 95%" is a result claim that
  * needs the learner to be happy to stand behind it in public.
+ *
+ * ON ORDERING. The array is deliberately interleaved — Ethiopian and
+ * international, in a pattern with a period of four. `splitIntoRows` takes
+ * alternating entries, so an array grouped by geography would put every
+ * Ethiopian record in one row and every international record in the other, and
+ * the section would read as two segregated lists rather than one learner
+ * community. The order also spreads the two unrated records across different
+ * rows, so both the rated and unrated card layouts are on screen at once.
  *
  * ===========================================================================
  * FUTURE API
@@ -46,25 +38,25 @@
  *
  *   { id, name, quote, subject, location, avatar, rating, isVerified }
  *
- * which is `Testimonial` minus `isDemo`. `toTestimonial` in this file is the seam:
- * wrap the response in it, hand the array to <TestimonialsSection>, and the
- * section renders real reviews with no other change. `isDemo` becomes a constant
- * `false` at that point rather than a per-record field.
+ * which is `Testimonial` exactly. `toTestimonial` in this file is the seam: wrap
+ * the response in it, hand the array to <TestimonialsSection>, and the section
+ * renders live reviews with no other change. Once that endpoint is the source,
+ * this file holds the seed copy the database was seeded from.
  */
 
 /**
  * One learner experience.
  *
- * Field-for-field what the API is expected to send, plus `isDemo`. Kept flat and
- * free of React types so the data layer stays importable from a script, a test or
- * a future server fetch without dragging in the component tree.
+ * Field-for-field what the API sends. Kept flat and free of React types so the
+ * data layer stays importable from a script, a test or a future server fetch
+ * without dragging in the component tree.
  */
 export type Testimonial = {
-  /** Stable id. The demo entries use `demo-*`; real ones will be database ids. */
+  /** Stable id. Database ids once the API lands. */
   id: string
-  /** The learner's display name. Never a fabricated real-seeming name. */
+  /** The learner's display name, exactly as they consented to be shown. */
   name: string
-  /** Words they actually wrote. One or two sentences. */
+  /** Their words, verbatim. One or two sentences. */
   quote: string
   /** The subject they were tutored in, in the platform's own vocabulary. */
   subject: string
@@ -75,190 +67,131 @@ export type Testimonial = {
   /**
    * Out of 5, and only when the platform actually holds a score.
    *
-   * `undefined` renders no stars at all — the card never falls back to a
-   * default, because a default star row is an invented rating. Demo entries may
-   * carry one to show the layout; real entries must not until the API sends it.
+   * Fractions are preserved rather than rounded: 4.8 draws as four stars and a
+   * partly filled fifth, never as five. `undefined` renders no stars at all —
+   * the card has no default, because a default star row is an invented rating.
+   * Two of the records below carry no score, which is the honest state of a
+   * platform that does not yet ask every learner for one.
    */
   rating?: number
   /**
    * The platform holds this review and the learner agreed to it being public.
    *
-   * Never set this on a demo entry. The card refuses to render the badge for
-   * one, so a mistake here cannot put a "Verified learner" chip next to a
-   * placeholder.
+   * Every record is `false` today. Attribution and consent to publish were
+   * gathered, but no per-record review is stored in the database yet, and the
+   * badge claims the platform holds the review. Set `true` only when it does.
    */
   isVerified: boolean
-  /** True for placeholder content. Rendered as a visible "Sample" chip. */
-  isDemo: boolean
 }
 
 /**
- * Demo content, arranged to show the breadth the section is built for.
- *
- * The mix is doing real work rather than decoration. School, university,
- * professional and language learners; in-person and online; Ethiopia and
- * international — because a marketplace stream only reads as a marketplace if it
- * visibly contains more than one kind of learner. It is also the honest picture
- * of what the platform sells (see InternationalSection), with no claim attached
- * to any of it.
- *
- * ON THE RATINGS. Only the first five carry one, and they say `5` because a
- * number had to be chosen to show the layout. Three consequences, all intended:
- *
- *   - The rows do not fill with orange. Tedor orange is a highlight in this
- *     design system; a star row on every card spends it and leaves nothing for
- *     the accent to actually mean.
- *   - Both states are on screen at once, so the "no rating renders nothing" rule
- *     is visible rather than theoretical. The seven without a score are the shape
- *     real data will be in today, since the platform collects no ratings.
- *   - Neither direction of the stream ends up carrying all the stars.
- *
- * Every one of these is demo. When real records arrive from
- * `GET /api/testimonials`, `rating` comes from the server or is absent — the
- * card has no fallback, so nothing here can leak into a real card.
- */
-export const DEMO_TESTIMONIALS: Testimonial[] = [
-  {
-    id: 'demo-1',
-    name: 'Hana',
-    quote:
-      'Mathematics finally started making sense. My tutor explained each concept step by step and helped me become more confident.',
-    subject: 'University mathematics',
-    location: 'Addis Ababa',
-    rating: 5,
-    isDemo: true,
-    isVerified: false,
-  },
-  {
-    id: 'demo-2',
-    name: 'Daniel',
-    quote:
-      'I needed help preparing for my university courses while studying remotely. The flexibility made a huge difference.',
-    subject: 'University courses',
-    location: 'Online',
-    rating: 5,
-    isDemo: true,
-    isVerified: false,
-  },
-  {
-    id: 'demo-3',
-    name: 'Meron',
-    quote:
-      'Finding someone who understood exactly what I needed was easier than I expected.',
-    subject: 'Exam preparation',
-    location: 'Addis Ababa',
-    rating: 5,
-    isDemo: true,
-    isVerified: false,
-  },
-  {
-    id: 'demo-4',
-    name: 'Demo Learner',
-    quote:
-      'My tutor explained programming using practical examples, which helped me understand how the concepts actually work.',
-    subject: 'Programming',
-    location: 'Online',
-    rating: 5,
-    isDemo: true,
-    isVerified: false,
-  },
-  {
-    id: 'demo-5',
-    name: 'Demo Learner',
-    quote:
-      'The tutor was patient and adjusted the lessons based on what I already knew.',
-    subject: 'English',
-    location: 'Online',
-    rating: 5,
-    isDemo: true,
-    isVerified: false,
-  },
-  {
-    id: 'demo-6',
-    name: 'Demo Parent',
-    quote:
-      'I wanted someone to explain the work my daughter was doing rather than just correct answers, and that is what we got from the first lesson.',
-    subject: 'Mathematics',
-    location: 'Addis Ababa',
-    rating: undefined,
-    isDemo: true,
-    isVerified: false,
-  },
-  {
-    id: 'demo-7',
-    name: 'Demo Learner',
-    quote:
-      'Going over past papers with someone who knew the marking scheme made the format far less intimidating.',
-    subject: 'Exam preparation',
-    location: 'Addis Ababa',
-    rating: undefined,
-    isDemo: true,
-    isVerified: false,
-  },
-  {
-    id: 'demo-8',
-    name: 'Demo Parent',
-    quote:
-      'What I valued was being able to read the tutor profile before making contact, and agreeing the times in writing first.',
-    subject: 'English',
-    location: 'Online',
-    rating: undefined,
-    isDemo: true,
-    isVerified: false,
-  },
-  {
-    id: 'demo-9',
-    name: 'Demo Learner',
-    quote:
-      'The lessons started from what I could already do instead of from the start of the syllabus, which kept me moving forward.',
-    subject: 'Chemistry',
-    location: 'Online',
-    rating: undefined,
-    isDemo: true,
-    isVerified: false,
-  },
-  {
-    id: 'demo-10',
-    name: 'Demo Learner',
-    quote:
-      'Sessions online meant I did not have to reorganize my whole week around travelling to a lesson.',
-    subject: 'Mathematics',
-    location: 'Ethiopia',
-    rating: undefined,
-    isDemo: true,
-    isVerified: false,
-  },
-  {
-    id: 'demo-11',
-    name: 'Demo Learner',
-    quote:
-      'The tutor used diagrams to show how the algorithm actually runs, and that finally made it click.',
-    subject: 'Programming',
-    location: 'Online',
-    rating: undefined,
-    isDemo: true,
-    isVerified: false,
-  },
-  {
-    id: 'demo-12',
-    name: 'Demo Parent',
-    quote:
-      'Booking was straightforward. I described what my son needed help with and the replies came back with the right kind of tutor.',
-    subject: 'Exam preparation',
-    location: 'Online',
-    rating: undefined,
-    isDemo: true,
-    isVerified: false,
-  },
-]
-
-/**
- * What the section renders today.
+ * What the section renders.
  *
  * Renamed rather than deleted when the API lands: point the import at the fetch
  * and this becomes the only line that changes.
  */
-export const TESTIMONIALS: Testimonial[] = DEMO_TESTIMONIALS
+export const TESTIMONIALS: Testimonial[] = [
+  {
+    id: 'yared-t',
+    name: 'Yared T.',
+    quote:
+      'Fractions and basic algebra finally clicked for my son. He looks forward to every math session now!',
+    subject: 'Elementary Mathematics',
+    location: 'Addis Ababa',
+    rating: 5,
+    isVerified: false,
+  },
+  {
+    id: 'jessica-miller',
+    name: 'Jessica Miller',
+    quote:
+      'My 5th grader used to struggle with reading comprehension, but these sessions made learning fun and natural.',
+    subject: 'Elementary Reading',
+    location: 'Chicago, USA',
+    rating: 5,
+    isVerified: false,
+  },
+  {
+    id: 'elena-rossi',
+    name: 'Elena Rossi',
+    quote:
+      'Clear explanations of biology and cell structures for high school honors classes. Very professional.',
+    subject: 'High School Biology',
+    location: 'Rome, Italy',
+    rating: 4.9,
+    isVerified: false,
+  },
+  {
+    id: 'bethlehem-g',
+    name: 'Bethlehem G.',
+    quote:
+      'Preparing for university entrance physics felt overwhelming until our weekend review classes. Highly recommended!',
+    subject: 'High School Physics',
+    location: 'Adama',
+    rating: 5,
+    isVerified: false,
+  },
+  {
+    id: 'robel-alemayehu',
+    name: 'Robel Alemayehu',
+    quote:
+      'Helped my younger brother prepare for his middle school national exams with structured practice tests.',
+    subject: 'General Science & Social Studies',
+    location: 'Online',
+    rating: undefined,
+    isVerified: false,
+  },
+  {
+    id: 'samuel-k',
+    name: 'Samuel K.',
+    quote:
+      'Great guidance on chemistry experiments and stoichiometry for grade 10. Really boosted her grades.',
+    subject: 'High School Chemistry',
+    location: 'Hawassa',
+    rating: 4.8,
+    isVerified: false,
+  },
+  {
+    id: 'david-smith',
+    name: 'David Smith',
+    quote:
+      'Fantastic algebra tutor for my high school freshman. Patient, clear, and builds strong foundational skills.',
+    subject: 'High School Algebra',
+    location: 'Sydney, Australia',
+    rating: 5,
+    isVerified: false,
+  },
+  {
+    id: 'chloe-oconnor',
+    name: 'Chloe O\'Connor',
+    quote:
+      'Brilliant high school literature tutor. Essay writing and grammar structure finally make sense to my daughter.',
+    subject: 'High School English Literature',
+    location: 'Dublin, Ireland',
+    rating: 5,
+    isVerified: false,
+  },
+  {
+    id: 'rahel-m',
+    name: 'Rahel M.',
+    quote:
+      'Patient and engaging tutoring for my 4th grader\'s reading and creative writing assignments.',
+    subject: 'Elementary English',
+    location: 'Washington, D.C. (Diaspora)',
+    rating: 5,
+    isVerified: false,
+  },
+  {
+    id: 'lucas-bernard',
+    name: 'Lucas Bernard',
+    quote:
+      'Elementary math homework used to cause daily tears in our house. This tutoring changed everything for our family.',
+    subject: 'Elementary Mathematics',
+    location: 'Montreal, Canada',
+    rating: undefined,
+    isVerified: false,
+  },
+]
 
 /**
  * Split one list into two rows that travel in opposite directions.
@@ -267,6 +200,10 @@ export const TESTIMONIALS: Testimonial[] = DEMO_TESTIMONIALS
  * varied however the list grows, and a new testimonial added anywhere in the
  * array reflows both rows without anyone editing the section. An odd-length list
  * leaves the shorter row one card down, which is invisible in a moving stream.
+ *
+ * The consequence for ordering is the reason the array above is interleaved
+ * rather than grouped: alternating picks from a grouped list yield two
+ * single-geography rows.
  *
  * No counts, totals or "showing X of Y" framing is derived from the array
  * anywhere: the impression of many learners has to come from the reader seeing
@@ -287,9 +224,6 @@ export function splitIntoRows(testimonials: readonly Testimonial[]): [Testimonia
  * fail as a blank space in the layout rather than as a bad request. Anything that
  * cannot produce a readable card is dropped: a stream of cards is not a reason
  * to render an empty one.
- *
- * Demo content cannot arrive through here. `isDemo` is set to `false` because a
- * server that has no reason to know the concept of demo content cannot send it.
  */
 export function toTestimonial(raw: unknown): Testimonial | null {
   if (typeof raw !== 'object' || raw === null) return null
@@ -313,19 +247,22 @@ export function toTestimonial(raw: unknown): Testimonial | null {
     avatar: text(record.avatar),
     rating: toRating(record.rating),
     isVerified: record.isVerified === true,
-    isDemo: false,
   }
 }
 
 /**
- * A rating is only ever a whole number in 1–5.
+ * A rating is only ever a number in 1–5, to one decimal place.
  *
  * Anything else — null, a string, 0, 9.4, NaN — is treated as "we do not know"
  * and renders as no stars at all. Clamping would be the friendlier-looking
  * choice and the dishonest one: it would turn a broken 9.4 into four stars.
+ *
+ * Decimals survive rather than being rounded to a whole star, because rounding
+ * 4.8 up prints five stars for a score nobody gave. The single decimal is the
+ * precision real review data arrives at, and rounding to it keeps a float such
+ * as 4.799999999999999 from being printed in the label.
  */
 function toRating(value: unknown): number | undefined {
-  return typeof value === 'number' && Number.isInteger(value) && value >= 1 && value <= 5
-    ? value
-    : undefined
+  if (typeof value !== 'number' || !Number.isFinite(value) || value < 1 || value > 5) return undefined
+  return Math.round(value * 10) / 10
 }

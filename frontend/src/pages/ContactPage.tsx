@@ -27,7 +27,7 @@ export function ContactPage() {
             Our <Link to="/about" className="text-brand-700 underline underline-offset-2">About</Link>{' '}
             page explains how Tedor Tutors works, and{' '}
             <Link
-              to="/#how-it-works"
+              to="/how-it-works"
               className="text-brand-700 underline underline-offset-2"
             >
               How It Works

@@ -1,5 +1,7 @@
 import { z } from 'zod'
 
+import { UPLOAD_URL_PREFIX } from '../uploads/storage.js'
+
 /**
  * Validation for tutor profile management endpoints.
  *
@@ -13,16 +15,6 @@ import { z } from 'zod'
 
 // Teaching modes from Prisma schema
 export const TEACHING_MODES = ['ONLINE', 'IN_PERSON', 'BOTH']
-
-/**
- * Where uploaded profile photos are served from.
- *
- * A photo the tutor uploaded is stored as a path relative to the API origin
- * rather than a full URL: the API can be reached through the Vite dev proxy, a
- * CDN, or a different public hostname at different times, and a hardcoded host
- * in the database would break the moment that changed.
- */
-const UPLOAD_URL_PREFIX = '/api/uploads'
 
 // Education levels from existing constant (must match frontend/backend)
 export const EDUCATION_LEVELS = [

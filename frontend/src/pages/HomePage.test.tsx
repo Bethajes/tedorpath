@@ -4,6 +4,7 @@ import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { HomePage } from './HomePage'
+import { PageShell } from '@/components/layout/PageShell'
 import { AuthProvider } from '@/features/auth/AuthProvider'
 import { resetAuthState } from '@/features/auth/authStore'
 import { UNIVERSITIES } from '@/data/universities'
@@ -17,8 +18,8 @@ import type { PublicStats, TutorCardDTO } from '@/features/tutors/tutors.types'
  * `AuthProvider` + `MemoryRouter` because PageShell renders the Navbar (which
  * reads auth) and ScrollToHash (which reads the location).
  *
- * `matchMedia` is stubbed because jsdom never matches a media query, and
- * TedorLearningGraphic checks `prefers-reduced-motion` on mount.
+ * `matchMedia` is stubbed because jsdom never matches a media query, and the
+ * scroll `Reveal` wrapper reads `prefers-reduced-motion` on mount.
  */
 
 let fetchMock: ReturnType<typeof vi.fn>
@@ -147,11 +148,9 @@ const statsArbitrary: fc.Arbitrary<PublicStats> = fc.record({
 /**
  * Resolves once the page's data-driven sections have settled.
  *
- * `tutors` is no longer asserted here: the homepage does not list profiles, so
- * the directory response now only drives the tutor pips in
- * LearnerTutorConnection, which renders `<a>` elements rather than cards.
- * Waiting on the stats value is enough to know the page has finished its
- * fetches.
+ * `tutors` is no longer asserted here: the homepage shows no profiles at all, so
+ * the directory response drives nothing on this page. Waiting on the stats value
+ * is enough to know the page has finished its fetches.
  */
 async function waitForPageData(stats: PublicStats) {
   await waitFor(() => {
@@ -206,10 +205,10 @@ describe('HomePage — Property 1: exactly one h1', () => {
 
     await waitForPageData({ approvedTutors: 99, subjects: 40, universities: 6, countries: 5 })
 
-    // The page's many h2/h3 sections must not introduce a second h1, whatever
+    // The page's many h2 sections must not introduce a second h1, whatever
     // the API returned.
     expect(container.querySelectorAll('h1')).toHaveLength(1)
-    expect(container.querySelectorAll('h3').length).toBeGreaterThan(0)
+    expect(container.querySelectorAll('h2').length).toBeGreaterThan(0)
   })
 })
 
@@ -278,17 +277,18 @@ describe('HomePage — section order', () => {
     expect(labelled).toEqual([
       'university-trust-heading',
       'stats-heading',
-      'verification-steps-heading',
       'testimonials-heading',
-      'learning-journey-heading',
-      'connection-heading',
       'international-heading',
-      'trust-heading',
-      'become-a-tutor-heading',
     ])
+    // The trust section moved to /about, so the homepage no longer carries it
+    // or its anchor.
+    expect(container.querySelector('#why-tedor')).toBeNull()
+    // Neither does the learner/tutor connection section, which now lives on
+    // /how-it-works.
+    expect(container.querySelector('#connection-heading')).toBeNull()
   })
 
-  it('provides the anchor targets the navbar and footer link to', () => {
+  it('every anchor any link points at exists on this page', () => {
     stubPage({ tutors: [], stats: statsResponse() })
     const { container } = renderHomePage()
 
@@ -305,13 +305,18 @@ describe('HomePage — section order', () => {
         return target.length > 1 ? [target] : []
       })
 
-    expect(links.length).toBeGreaterThan(0)
     for (const anchor of links) {
       expect(container.querySelector(anchor), `no target for ${anchor}`).not.toBeNull()
     }
 
-    // Still the one the navbar's "How It Works" entry resolves to.
-    expect(container.querySelector('#how-it-works')).not.toBeNull()
+    // The learning journey lives on /how-it-works now, so the homepage carries
+    // no such anchor and both the navbar and the footer address the page.
+    expect(container.querySelector('#how-it-works')).toBeNull()
+    expect(links).not.toContain('/#how-it-works')
+    const howItWorks = Array.from(container.querySelectorAll('a[href]'))
+      .map((a) => a.getAttribute('href'))
+      .filter((href) => href === '/how-it-works')
+    expect(howItWorks.length).toBeGreaterThan(0)
   })
 
   it('no longer offers a homepage subject index, and nothing links to one', () => {
@@ -331,6 +336,46 @@ describe('HomePage — section order', () => {
 })
 
 // ---------------------------------------------------------------------------
+// The announcement strip is gone from the site, not just from this page
+// ---------------------------------------------------------------------------
+
+describe('HomePage — no announcement strip above the header', () => {
+  it('renders the navbar without the notice on the homepage', () => {
+    stubPage({ tutors: [], stats: statsResponse() })
+    const { container } = renderHomePage()
+
+    expect(screen.queryByText(/tutor profiles are reviewed by our team/i)).toBeNull()
+    expect(screen.queryByRole('link', { name: /apply to teach/i })).toBeNull()
+    expect(screen.queryByRole('button', { name: /dismiss announcement/i })).toBeNull()
+
+    // The header opens straight into the dark bar.
+    const header = container.querySelector('header')
+    expect(header?.firstElementChild?.className ?? '').not.toMatch(/notice/)
+  })
+
+  it('renders no notice on an interior page either', () => {
+    // This used to be suppressed per route — the homepage opted out while every
+    // other page kept the strip. The strip is gone, so the route has stopped
+    // mattering and asserting it here is what stops it coming back on /tutors or
+    // /how-it-works.
+    stubPage({ tutors: [], stats: statsResponse() })
+    render(
+      <AuthProvider>
+        <MemoryRouter initialEntries={['/tutors']}>
+          <PageShell>
+            <p>Directory</p>
+          </PageShell>
+        </MemoryRouter>
+      </AuthProvider>,
+    )
+
+    expect(screen.queryByText(/tutor profiles are reviewed by our team/i)).toBeNull()
+    expect(screen.queryByRole('link', { name: /apply to teach/i })).toBeNull()
+    expect(screen.queryByRole('button', { name: /dismiss announcement/i })).toBeNull()
+  })
+})
+
+// ---------------------------------------------------------------------------
 // Requirement 15.1 — no link points at a route that does not exist
 // ---------------------------------------------------------------------------
 
@@ -338,11 +383,15 @@ describe('HomePage — every link resolves to a real route', () => {
   /**
    * The public paths from app/router.tsx. A subset check by design: adding a
    * route does not break this, but renaming or removing one does.
+   *
+   * `/how-it-works` is here because the navbar links to it, which makes it a
+   * path this page renders even though nothing inside <main> points at it.
    */
   const REAL_PATHS = new Set([
     '/',
     '/about',
     '/contact',
+    '/how-it-works',
     '/login',
     '/register',
     '/request-tutor',
@@ -374,21 +423,19 @@ describe('HomePage — every link resolves to a real route', () => {
     }
   })
 
-  it('links a real tutor to their /tutors/:id profile route', async () => {
+  it('links no tutor profile at all, whatever the directory returns', async () => {
     const tutor = makeTutor({ id: '22222222-2222-4222-8222-222222222222' })
     stubPage({ tutors: [tutor], stats: statsResponse() })
     const { container } = renderHomePage()
 
-    // The homepage no longer lists profile cards, but the tutors it does show
-    // come from the same directory response, so their links still have to
-    // resolve to a real profile route. LearnerTutorConnection labels them with
-    // the first name only.
-    await waitFor(() => {
-      expect(screen.getByRole('link', { name: /^alice/i })).toBeInTheDocument()
-    })
+    // The homepage shows no profiles — not cards, not names in a connecting
+    // column. The directory and /how-it-works are the pages that do, so a tutor
+    // in the response must not leak a /tutors/:id link onto this page.
+    await waitForPageData(statsResponse())
 
     const hrefs = Array.from(container.querySelectorAll('a[href]')).map((a) => a.getAttribute('href'))
-    expect(hrefs).toContain(`/tutors/${tutor.id}`)
+    expect(hrefs).not.toContain(`/tutors/${tutor.id}`)
+    expect(screen.queryByRole('link', { name: /^alice/i })).toBeNull()
   })
 })
 

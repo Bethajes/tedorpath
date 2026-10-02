@@ -32,7 +32,7 @@ const COLUMNS: FooterColumn[] = [
     title: 'Tedor Tutors',
     links: [
       { to: '/about', label: 'About' },
-      { to: '/#how-it-works', label: 'How It Works' },
+      { to: '/how-it-works', label: 'How It Works' },
       { to: '/tutors', label: 'Find a Tutor' },
       { to: '/become-a-tutor', label: 'Become a Tutor' },
     ],

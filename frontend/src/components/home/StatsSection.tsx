@@ -1,8 +1,13 @@
 import { useEffect, useState } from 'react'
 
 import { Container } from '@/components/layout/PageShell'
+import { SectionHeading } from '@/components/sections/SectionHeading'
+import { Reveal } from '@/components/ui/Reveal'
 import { getPublicStats } from '@/features/tutors/tutors.api'
 import type { PublicStats } from '@/features/tutors/tutors.types'
+import { statDisplayValue } from '@/lib/publicStats'
+
+import '../brand/surfaces.css'
 
 /**
  * Homepage trust statistics.
@@ -16,6 +21,12 @@ import type { PublicStats } from '@/features/tutors/tutors.types'
  * the page render. Stats are an enhancement, not the reason the homepage
  * exists, so a slow or failing endpoint must not delay or break anything else
  * on the page.
+ *
+ * The number-to-print rule is `statDisplayValue` in `@/lib/publicStats`, shared
+ * with the /how-it-works band. Anything that is not a positive integer is
+ * treated as unknown rather than as zero: `undefined` (the request has not
+ * landed), `null` (it failed) and a malformed value from the server all mean
+ * "we do not know", and printing a count for any of them would be a guess.
  *
  * Requirements: 4.1, 4.2, 4.3, 4.5, 4.6
  */
@@ -40,24 +51,6 @@ const STAT_DEFINITIONS: StatDefinition[] = [
   { key: 'universities', label: 'University backgrounds', fallback: 'Several' },
   { key: 'countries', label: 'Countries represented', fallback: 'Multiple' },
 ]
-
-/**
- * The number to print, or null when there is nothing true to print.
- *
- * Anything that is not a positive integer is treated as unknown rather than as
- * zero: `undefined` (the request has not landed), `null` (it failed) and a
- * malformed value from the server all mean "we do not know", and printing a
- * count for any of them would be a guess.
- */
-function displayValue(count: number | undefined, fallback: string): string {
-  if (typeof count === 'number' && Number.isInteger(count) && count > 0) {
-    // Rendered as written rather than through `toLocaleString`: a thousands
-    // separator would put "1,234" in the DOM where the API said "1234", and
-    // the displayed figure should be the count itself, not a reformatting of it.
-    return String(count)
-  }
-  return fallback
-}
 
 export function StatsSection() {
   // `undefined` means "not known yet", which is deliberately distinct from 0
@@ -89,35 +82,42 @@ export function StatsSection() {
   }, [])
 
   return (
-    <section className="section-y bg-white" aria-labelledby="stats-heading">
-      <Container>
-        <div className="max-w-2xl">
-          <h2 id="stats-heading" className="text-3xl font-bold tracking-[-0.02em] sm:text-4xl">
-            The platform today
-          </h2>
-          <p className="mt-4 text-lg leading-relaxed text-ink-600">
-            These figures come straight from the platform, counting only the tutor profiles that
-            are live right now. When a count is still zero we say so rather than round it up.
-          </p>
-        </div>
+    <section
+      aria-labelledby="stats-heading"
+      className="tt-hero relative isolate overflow-hidden py-16 sm:py-20 lg:py-24"
+    >
+      <div aria-hidden="true" className="tt-grid tt-grid--band" />
+
+      <Container className="relative">
+        <SectionHeading
+          id="stats-heading"
+          eyebrow="Where things stand"
+          tone="onDark"
+          lede="These figures come straight from the platform, counting only the tutor profiles that are live right now. When a count is still zero we say so rather than round it up."
+        >
+          The platform today
+        </SectionHeading>
 
         <dl className="mt-12 grid grid-cols-2 gap-4 sm:gap-5 lg:grid-cols-4">
-          {STAT_DEFINITIONS.map(({ key, label, fallback }) => {
-            const value = displayValue(stats?.[key], fallback)
+          {STAT_DEFINITIONS.map(({ key, label, fallback }, index) => {
+            const value = statDisplayValue(stats?.[key], fallback)
 
             return (
-              <div
+              <Reveal
                 key={key}
-                className="flex h-full flex-col items-start rounded-2xl border border-ink-200 bg-white p-5 shadow-[0_1px_3px_rgba(18,26,36,0.05)] sm:p-6"
+                delay={index * 80}
+                className="tt-stat flex h-full flex-col rounded-2xl border border-ink-800 bg-ink-900/50 p-5 sm:p-6"
               >
+                <dt className="order-2 mt-2 text-sm font-semibold leading-relaxed text-brand-200">
+                  {label}
+                </dt>
                 <dd
-                  className="text-3xl font-bold tracking-[-0.02em] text-brand-700 sm:text-4xl"
                   data-testid={`stat-value-${key}`}
+                  className="order-1 text-3xl font-bold tracking-[-0.03em] text-white sm:text-4xl"
                 >
                   {value}
                 </dd>
-                <dt className="mt-2 text-sm leading-relaxed text-ink-600">{label}</dt>
-              </div>
+              </Reveal>
             )
           })}
         </dl>

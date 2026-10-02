@@ -15,6 +15,7 @@ import {
   AboutPage,
   ContactPage,
   HomePage,
+  HowItWorksPage,
   LoginPage,
   NotFoundPage,
   PageFallback,
@@ -39,6 +40,7 @@ export const router = createBrowserRouter([
   { path: '/', element: <HomePage />, hydrateFallbackElement: <PageFallback /> },
   { path: '/request-tutor', element: <RequestTutorPage /> },
   { path: '/about', element: <AboutPage /> },
+  { path: '/how-it-works', element: <HowItWorksPage /> },
   { path: '/contact', element: <ContactPage /> },
 
   // Tutor marketplace — public directory and individual profile pages

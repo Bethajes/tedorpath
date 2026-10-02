@@ -1,7 +1,7 @@
 import { useState } from 'react'
-import { Link } from 'react-router-dom'
 
 import { Container } from '@/components/layout/PageShell'
+import { SectionHeading } from '@/components/sections/SectionHeading'
 import { usePrefersReducedMotion } from '@/lib/usePrefersReducedMotion'
 import { splitIntoRows, TESTIMONIALS } from './testimonialData'
 import type { Testimonial } from './testimonialData'
@@ -26,17 +26,27 @@ import { TestimonialRow } from './TestimonialRow'
  * this platform comes from StatsSection, which counts real database records.
  *
  * There is also no line about learners being spread across the world, even
- * though the demo data is deliberately international. InternationalSection says
- * it two sections later, and claiming it twice would only give the weaker
- * statement the chance to be believed. The mix of subjects, levels and delivery
- * modes in the stream does that work by being visible rather than asserted.
+ * though the records below genuinely do come from Ethiopia and from four other
+ * countries. InternationalSection says it two sections later, and claiming it
+ * twice would only give the weaker statement the chance to be believed. The mix
+ * of subjects, levels and locations in the stream does that work by being
+ * visible rather than asserted.
+ *
+ * THE SECTION ENDS ON THE STREAM
+ * -----------------------------
+ * It used to close with the review claim and a local pair of doors — "Ready to
+ * start learning?" with Find a Tutor and Become a Tutor. Both are gone.
+ * TrustSection — on /about, not here — carries the review claim once, where it
+ * has the four other defensible claims around it, and CTASection owns the call
+ * to action at the foot of the page: a
+ * second one here competed with it a few scrolls apart and the two read as a
+ * single panel. The stream is the section's whole job, so it now ends there.
  *
  * TO GO LIVE
  * ----------
  * `TESTIMONIALS` becomes the result of `GET /api/testimonials` (see
- * testimonialData.ts). Nothing in this file changes: the row, the card and the
- * trust line are all already shaped for real records, and the demo array is
- * deleted rather than gradually overwritten.
+ * testimonialData.ts). Nothing in this file changes: the row and the card are
+ * already shaped for real records.
  *
  * Requirements: 14.1, 14.2, 14.5
  */
@@ -63,17 +73,14 @@ export function TestimonialsSection({ testimonials = TESTIMONIALS }: Testimonial
     <section className="section-y bg-ink-50" aria-labelledby="testimonials-heading">
       <Container>
         <div className="flex flex-col gap-6 sm:flex-row sm:items-end sm:justify-between sm:gap-8">
-          <div className="max-w-2xl">
-            <h2
-              id="testimonials-heading"
-              className="text-3xl font-bold tracking-[-0.02em] sm:text-4xl"
-            >
-              Real learning. Real progress.
-            </h2>
-            <p className="mt-4 text-lg leading-relaxed text-ink-600">
-              Stories from learners and families who found support through Tedor.
-            </p>
-          </div>
+          <SectionHeading
+            id="testimonials-heading"
+            eyebrow="Learner stories"
+            lede="Stories from learners and families who found support through Tedor."
+            className="sm:flex-1"
+          >
+            Real learning. Real progress.
+          </SectionHeading>
 
           {/*
             Step controls for the stream.
@@ -145,76 +152,6 @@ export function TestimonialsSection({ testimonials = TESTIMONIALS }: Testimonial
         <TestimonialRow testimonials={firstRow} step={step} />
         <TestimonialRow testimonials={secondRow} step={step} reverse />
       </div>
-
-      <Container>
-        <p className="mt-12 flex items-start justify-center gap-2.5 text-center text-[0.95rem] font-medium text-ink-600 sm:mt-14">
-          <svg
-            aria-hidden="true"
-            width="18"
-            height="18"
-            viewBox="0 0 20 20"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="1.8"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            className="mt-0.5 shrink-0 text-brand-600"
-          >
-            <path d="M4.5 10.5l3.5 3.5 7.5-8" />
-          </svg>
-          <span className="max-w-2xl text-left sm:text-center">
-            Every tutor profile is reviewed before it appears publicly on Tedor Tutors.
-          </span>
-        </p>
-
-        {/*
-          A restrained close to the section, not a second full-width CTA panel:
-          CTASection already does that job at the foot of the page. Two large
-          competing panels a few scrolls apart would read as one, and the
-          page-level one is the stronger of the two. This is the pair of doors
-          repeated locally — find a tutor, or become one — for a visitor who is
-          convinced by the stream and has not reached the end of the page.
-        */}
-        <div className="mt-14 flex flex-col items-center text-center">
-          <h3 className="text-2xl font-bold tracking-[-0.02em] sm:text-3xl">
-            Ready to start learning?
-          </h3>
-          <p className="mt-3 max-w-md text-[0.95rem] leading-relaxed text-ink-600">
-            Tell us what you want to learn and we&apos;ll help you take the next step.
-          </p>
-
-          <div className="mt-7 flex flex-col items-center gap-4 sm:flex-row sm:gap-6">
-            <Link
-              to="/tutors"
-              className="group inline-flex items-center justify-center gap-2 rounded-lg bg-brand-600 px-6 py-3.5 text-base font-medium text-white shadow-sm transition-colors hover:bg-brand-700"
-            >
-              Find a Tutor
-              <svg
-                aria-hidden="true"
-                width="16"
-                height="16"
-                viewBox="0 0 16 16"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                className="transition-transform duration-150 group-hover:translate-x-0.5"
-              >
-                <path d="M2 8h11" />
-                <path d="M9 4l4 4-4 4" />
-              </svg>
-            </Link>
-
-            <Link
-              to="/become-a-tutor"
-              className="text-base font-medium text-brand-700 underline-offset-4 transition-colors hover:text-brand-800 hover:underline"
-            >
-              Become a Tutor
-            </Link>
-          </div>
-        </div>
-      </Container>
     </section>
   )
 }

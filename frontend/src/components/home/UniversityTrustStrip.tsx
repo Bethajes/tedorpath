@@ -1,6 +1,7 @@
 import { useState } from 'react'
 
 import { Container } from '@/components/layout/PageShell'
+import { Reveal } from '@/components/ui/Reveal'
 import { UNIVERSITIES } from '@/data/universities'
 
 /**
@@ -29,14 +30,16 @@ export function UniversityTrustStrip() {
   const entries = UNIVERSITIES.filter((entry) => !missingLogos.has(entry.logo))
 
   return (
-    <section className="section-y border-y border-ink-100 bg-ink-50" aria-labelledby="university-trust-heading">
+    <section className="section-y border-y border-brand-100 bg-ink-50" aria-labelledby="university-trust-heading">
       <Container>
-        <h2
-          id="university-trust-heading"
-          className="text-center text-xs font-semibold uppercase tracking-[0.16em] text-ink-500 sm:text-sm"
-        >
-          Tutors with backgrounds from
-        </h2>
+        <Reveal>
+          <h2
+            id="university-trust-heading"
+            className="text-center text-xs font-semibold uppercase tracking-[0.16em] text-ink-500 sm:text-sm"
+          >
+            Tutors with backgrounds from
+          </h2>
+        </Reveal>
 
         {/*
           A horizontal scroller on mobile rather than a wrapping row: with four

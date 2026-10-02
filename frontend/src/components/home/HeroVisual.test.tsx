@@ -7,12 +7,13 @@ import { HERO_PHOTOS, heroPhotoSrc } from './heroPhotos'
 import { MemoryRouter } from 'react-router-dom'
 
 /**
- * The hero's right-hand composition.
+ * The hero's right-hand composition: three photographs and nothing else.
  *
- * These are the guarantees the redesign must not be able to break by accident:
- * the learning-path graphic survives inside it, every frame is a real image
+ * These are the guarantees the simplification must not be able to break by
+ * accident: the photographs are still the visual, every frame is a real image
  * with real alt text and a fixed ratio, the labels are inert text rather than
- * controls, and nothing in the visual asserts a fact that cannot be checked.
+ * controls, no diagram or decorative panel has crept back in beside them, and
+ * nothing in the visual asserts a fact that cannot be checked.
  */
 
 function stubMatchMedia() {
@@ -50,11 +51,37 @@ function renderVisual() {
 }
 
 describe('HeroVisual — the composition', () => {
-  it('keeps the Tedor learning-path graphic as the anchor of the composition', () => {
-    renderVisual()
-    // The graphic and its long description are untouched; the composition is
-    // built around it rather than replacing it.
-    expect(screen.getByRole('img', { name: /learning journey/i })).toBeInTheDocument()
+  it('is made of the photographs and nothing else', () => {
+    const { container } = renderVisual()
+
+    // The whole visual is three figures. A diagram, an arrow, a panel or a card
+    // that is not a photograph would show up here as an extra element or an
+    // extra image role, which is what this guards.
+    expect(container.querySelectorAll('svg')).toHaveLength(0)
+    expect(screen.getAllByRole('img')).toHaveLength(HERO_PHOTOS.length)
+    expect(container.querySelectorAll('figure')).toHaveLength(HERO_PHOTOS.length)
+  })
+
+  it('gives every frame its own slot in the layered stack', () => {
+    const { container } = renderVisual()
+
+    // Placement is keyed off the slot classes rather than inline styles, so the
+    // stylesheet is what decides where each frame sits. Asserting the three
+    // classes exist is therefore what keeps the layers from collapsing into a
+    // plain row of three images.
+    for (const photo of HERO_PHOTOS) {
+      const item = container.querySelector(`.hv-item--${photo.id}`)
+      expect(item, `${photo.id} has no slot`).not.toBeNull()
+      expect(item?.tagName).toBe('FIGURE')
+    }
+
+    // The stacking order is the overlap: the lesson sits under the subject, the
+    // subject under the tutor. Losing it is a silent regression — nothing would
+    // fail, the composition would just stop reading as layered.
+    const zIndexes = HERO_PHOTOS.map(
+      (photo) => Number(getComputedStyle(container.querySelector(`.hv-item--${photo.id}`)!).zIndex) || 0,
+    )
+    expect(zIndexes).toEqual([...zIndexes].sort((a, b) => a - b))
   })
 
   it('renders every photo slot as a figure with a described image', () => {
@@ -119,17 +146,16 @@ describe('HeroVisual — no fabricated claims', () => {
   it('uses no numbers, names, ratings or credentials in its own copy', () => {
     const { container } = renderVisual()
 
-    // Only the labels this composition adds. The learning-path graphic carries
-    // numbered milestones, which are its own thing and are asserted separately.
+    // Every word this composition adds, from the labels under the frames. The
+    // subjects and teaching modes are the only vocabulary allowed here; anything
+    // quantified would be a claim.
     const own = [
       ...HERO_PHOTOS.map((photo) => photo.label),
-      ...Array.from(container.querySelectorAll('.hv-badge')).map((badge) => badge.textContent ?? ''),
+      ...Array.from(container.querySelectorAll('figcaption')).map((chip) => chip.textContent ?? ''),
     ]
 
     expect(own.length).toBeGreaterThanOrEqual(3)
     for (const text of own) {
-      // Subjects, teaching modes and the journey's own vocabulary are the only
-      // words allowed here. Anything quantified would be a claim.
       expect(text).not.toMatch(/\d/)
       for (const forbidden of [/tutor of/i, /rated/i, /\bstars?\b/i, /university of/i, /graduated/i]) {
         expect(text, `hero visual is claiming ${forbidden}`).not.toMatch(forbidden)
@@ -175,7 +201,7 @@ describe('hero photo slots', () => {
 })
 
 describe('Hero — the right-hand column', () => {
-  it('still renders the search card and the learning graphic side by side', () => {
+  it('still renders the search card and the photographs side by side', () => {
     render(
       <MemoryRouter>
         <Hero />
@@ -185,6 +211,6 @@ describe('Hero — the right-hand column', () => {
     expect(screen.getByRole('heading', { name: /what do you want to learn/i })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /find a tutor/i })).toBeInTheDocument()
     expect(screen.getByRole('link', { name: /become a tutor/i })).toBeInTheDocument()
-    expect(screen.getByRole('img', { name: /learning journey/i })).toBeInTheDocument()
+    expect(screen.getAllByRole('img')).toHaveLength(HERO_PHOTOS.length)
   })
 })

@@ -35,12 +35,6 @@
   --color-accent-800: #933e10;
   --color-accent-900: #793512;
 
-  /* Announcement strip that sits above the header. Warm cream rather than the
-     orange accent so a long line of text stays comfortable to read. */
-  --color-notice-50: #fdf8e8;
-  --color-notice-200: #f0e0a4;
-  --color-notice-700: #6b5410;
-  --color-notice-800: #4a3a0b;
 
   /* Dark navy/charcoal used for headings and body copy. */
   --color-ink-50: #f6f8fa;
@@ -123,5 +117,34 @@
   /* Standard vertical rhythm for a full-width homepage section. */
   .section-y {
     @apply py-12 sm:py-[var(--spacing-section)] lg:py-[var(--spacing-section-lg)];
+  }
+
+  /**
+   * Scroll reveal: the hidden state of `components/ui/Reveal.tsx`.
+   *
+   * The element starts hidden and is shown by `data-revealed="true"`, which the
+   * component sets once the block has been scrolled to (or immediately, for
+   * reduced motion and for browsers without IntersectionObserver).
+   *
+   * `translate` rather than `transform` on purpose. Tailwind's `translate-*` and
+   * `rotate-*` utilities also write the standalone properties, so a card that
+   * lifts on hover keeps both movements instead of one cancelling the other.
+   *
+   * Nothing here sets `visibility` or a delay on first paint, so a browser that
+   * never runs the observer still ends up with the content readable once the
+   * element is marked as revealed.
+   */
+  .reveal {
+    opacity: 0;
+    translate: 0 20px;
+    transition:
+      opacity 0.7s cubic-bezier(0.22, 1, 0.36, 1),
+      translate 0.7s cubic-bezier(0.22, 1, 0.36, 1);
+    transition-delay: var(--reveal-delay, 0ms);
+  }
+
+  .reveal[data-revealed='true'] {
+    opacity: 1;
+    translate: 0 0;
   }
 }

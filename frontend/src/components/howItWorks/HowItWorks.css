@@ -1,0 +1,101 @@
+/* ==========================================================================
+   /how-it-works — only what is specific to this page.
+
+   The brand's surfaces, geometry, cards and chips live in
+   `components/brand/surfaces.css` and are shared with the homepage. What is
+   left here is the one composition that belongs to this page alone: the hero's
+   people column, with the learner, the request card and the tutor overlapping
+   on a single grid track.
+
+   THE OVERLAP RULE. A vertical percentage margin resolves against the
+   containing block's WIDTH, so `margin-top: -13%` moves a block up by 13% of
+   the column's width rather than by 13% of anything inside it. That is what
+   lets every overlap below stay proportional: the composition rescales as one
+   unit and cannot leave its container at 320px or at 1440px.
+   ========================================================================== */
+
+@layer components {
+
+  .hiw-visual {
+    position: relative;
+    display: grid;
+    width: 100%;
+    max-width: 30rem;
+    margin-inline: auto;
+  }
+
+  .hiw-visual-main {
+    width: 78%;
+  }
+
+  .hiw-visual-badge {
+    z-index: 3;
+    width: 36%;
+    margin-top: -11%;
+  }
+
+  .hiw-visual-card {
+    position: relative;
+    z-index: 2;
+    width: 88%;
+    margin-top: -13%;
+    margin-inline-start: auto;
+    border: 1px solid var(--color-brand-100);
+    border-radius: 1.25rem;
+    background: #fff;
+    padding: 1.1rem 1.15rem;
+    box-shadow: 0 26px 50px -34px rgba(10, 15, 22, 0.75);
+    rotate: 1.5deg;
+  }
+
+  /* The card is a small illustration of the request → match flow, not a status
+     widget. It is aria-hidden in the markup because the step section below says
+     the same thing in full sentences. */
+  .hiw-rail {
+    position: relative;
+    display: grid;
+    gap: 0.7rem;
+  }
+
+  /* The rail the three dots sit on, drawn as a pseudo-element so the dots can
+     simply line up on top of it. */
+  .hiw-rail::before {
+    content: '';
+    position: absolute;
+    top: 0.45rem;
+    bottom: 0.45rem;
+    left: 0.28rem;
+    width: 1px;
+    background: var(--color-brand-200);
+  }
+
+  .hiw-rail-row {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 0.7rem;
+    font-size: 0.8rem;
+    font-weight: 500;
+    color: var(--color-ink-600);
+  }
+
+  .hiw-rail-dot {
+    z-index: 1;
+    flex-shrink: 0;
+    width: 0.6rem;
+    height: 0.6rem;
+    border-radius: 9999px;
+    background: #fff;
+    box-shadow: 0 0 0 2px var(--color-brand-200);
+  }
+
+  .hiw-rail-row--current {
+    color: var(--color-ink-900);
+    font-weight: 600;
+  }
+
+  .hiw-rail-row--current .hiw-rail-dot {
+    background: var(--color-accent-500);
+    box-shadow: 0 0 0 3px rgba(245, 128, 31, 0.22);
+  }
+}

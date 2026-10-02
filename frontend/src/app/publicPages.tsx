@@ -26,6 +26,10 @@ export const RequestTutorPage = lazy(() =>
 
 export const AboutPage = lazy(() => import('@/pages/AboutPage').then((m) => ({ default: m.AboutPage })))
 
+export const HowItWorksPage = lazy(() =>
+  import('@/pages/HowItWorksPage').then((m) => ({ default: m.HowItWorksPage })),
+)
+
 export const ContactPage = lazy(() =>
   import('@/pages/ContactPage').then((m) => ({ default: m.ContactPage })),
 )

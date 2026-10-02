@@ -4,31 +4,9 @@ import { Field, Input, Select } from '@/components/ui'
 import { Button } from '@/components/ui/Button'
 import { EDUCATION_LEVELS } from '@/types/tutorRequest'
 
+import { SUBJECT_OPTIONS } from '../tutorSubjects'
 import type { TeachingMode, TutorFilters } from '../tutors.types'
 import { TEACHING_MODES } from '../tutors.types'
-
-/**
- * The set of subjects seeded in the database, ordered as in the backend
- * SUBJECTS constant. A real implementation could fetch
- * `GET /api/subjects?active=true` and render whatever the server returns, but
- * that would require a loader and a loading state here. Because the list is
- * stable (it mirrors the backend seed data), it is defined as a constant so
- * the filter panel renders immediately without waiting for an extra fetch.
- *
- * Each entry carries the slug sent to the API and the label shown to the user.
- */
-const SUBJECT_OPTIONS: { slug: string; label: string }[] = [
-  { slug: 'mathematics', label: 'Mathematics' },
-  { slug: 'physics', label: 'Physics' },
-  { slug: 'chemistry', label: 'Chemistry' },
-  { slug: 'biology', label: 'Biology' },
-  { slug: 'english', label: 'English' },
-  { slug: 'programming', label: 'Programming' },
-  { slug: 'ai-technology', label: 'AI & Technology' },
-  { slug: 'university-course', label: 'University Course' },
-  { slug: 'exam-preparation', label: 'Exam Preparation' },
-  { slug: 'other', label: 'Other' },
-]
 
 const TEACHING_MODE_LABELS: Record<TeachingMode, string> = {
   ONLINE: 'Online',

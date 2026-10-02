@@ -1,0 +1,439 @@
+/* ==========================================================================
+   Tedor's shared surfaces — the visual language both public pages are built on.
+
+   One stylesheet for everything that is not layout-specific: the navy surface
+   and its geometry, the photograph frames, the chips, the section divider, the
+   numbered-step cards, and the hover and reveal behaviour they share. The
+   `/` homepage and `/how-it-works` are the same brand saying the same things at
+   different lengths, so anything that describes the *brand* lives here and
+   anything that describes one *page* lives in that page's own stylesheet.
+
+   THE CLASSES
+     .tt-hero      the deep-navy surface: azure washes, no hard edge
+     .tt-grid      the blueprint grid behind it, masked so it fades out
+     .tt-path      the rising brand line that finishes in the orange dart
+     .tt-fade      the hand-off from navy to the white section underneath
+     .tt-dots      the faint dotted field for light sections
+     .tt-photo     a photograph frame: crop, tilt, ring, hover lift
+     .tt-chip      the small label that sits under or across a frame
+     .tt-rule      the hairline-and-diamond that opens a white section
+     .tt-connector the line and travelling light between two step badges
+     .tt-card      a numbered content card and its hover lift
+     .tt-card-icon the icon tile inside one, which fills on hover
+     .tt-stat      a statistics tile on navy
+     .tt-faq       a disclosure card
+     .tt-shape     the two decorative geometry marks (tilted square, orange bar)
+     .tt-arc       the growth arc on a call to action
+
+   ONLY `transform`, `translate`, `rotate` and `opacity` are ever animated, and
+   each rule names its own property rather than `transform`, so a hover lift
+   cannot cancel a reveal or a tilt. Everything stays on the compositor and the
+   site ships no motion library.
+
+   Reduced motion: index.css collapses durations globally, and the block at the
+   bottom stops the looping animations outright so the travelling light and the
+   arcs render as the plain static rules they are.
+
+   Everything below is inside `@layer components`, which is what lets a utility
+   class win where a caller asks for one — `rotate-0` on a `.tt-photo` to leave a
+   frame untilted, `mt-0` on a `.tt-chip` that is positioned rather than stacked
+   under its frame. Un-layered CSS beats every layer in Tailwind's cascade,
+   which would have quietly broken both.
+   ========================================================================== */
+
+@layer components {
+
+  /* --- The navy surface ----------------------------------------------------- */
+
+  .tt-hero {
+    position: relative;
+    isolation: isolate;
+    overflow: hidden;
+    /* The navy the whole site is anchored to, with two azure washes placed where
+       the eye starts and where the copy ends. Slightly lifted off pure black so
+       the blues in the geometry stay visible against it. */
+    background:
+      radial-gradient(90% 120% at 78% -10%, #104269 0%, rgba(16, 66, 105, 0) 58%),
+      radial-gradient(70% 90% at 8% 108%, #0b5f9f 0%, rgba(11, 95, 159, 0) 62%),
+      var(--color-ink-950);
+  }
+
+  /* The blueprint grid. Masked to a soft oval under the headline so the pattern
+     is strongest where the eye starts and gone by the time it reaches the
+     photograph — a full-bleed grid reads as a template, a masked one as a
+     surface. */
+  .tt-grid {
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    pointer-events: none;
+    background-image:
+      linear-gradient(to right, rgba(138, 205, 247, 0.09) 1px, transparent 1px),
+      linear-gradient(to bottom, rgba(138, 205, 247, 0.09) 1px, transparent 1px);
+    background-size: 72px 72px;
+    -webkit-mask-image: radial-gradient(115% 85% at 50% 0%, #000 0%, transparent 72%);
+    mask-image: radial-gradient(115% 85% at 50% 0%, #000 0%, transparent 72%);
+  }
+
+  /* The same grid, centred on a shorter band rather than sitting under a
+     headline. */
+  .tt-grid--band {
+    background-size: 56px 56px;
+    -webkit-mask-image: radial-gradient(120% 105% at 50% 50%, #000 0%, transparent 72%);
+    mask-image: radial-gradient(120% 105% at 50% 50%, #000 0%, transparent 72%);
+  }
+
+  /* The logo's own gesture — a line that rises and finishes in an orange arrow —
+     drawn across the lower third. It is the one piece of Tedor geometry that
+     carries meaning: it points down the page. */
+  .tt-path {
+    position: absolute;
+    inset: auto 0 0;
+    z-index: -1;
+    width: 100%;
+    height: auto;
+    color: var(--color-brand-700);
+    pointer-events: none;
+    /* Faded only at the entry, not at the exit: the orange dart at the top right
+       is the part of the geometry that has to stay solid. */
+    -webkit-mask-image: linear-gradient(to right, transparent 2%, #000 26%, #000 100%);
+    mask-image: linear-gradient(to right, transparent 2%, #000 26%, #000 100%);
+  }
+
+  .tt-path-line {
+    stroke-dasharray: 26 900;
+    animation: tt-dash 9s linear infinite;
+  }
+
+  /* The handoff from the navy surface to the white section under it: a gradient
+     rather than a hard edge, so the two read as one surface changing colour
+     rather than as two blocks stacked on each other.
+
+     Negative z-index puts it behind the content (the surface establishes an
+     isolation context) rather than over it, so a photograph or a line of copy can
+     never be washed out by a decorative gradient. Its height is also the
+     surface's bottom-padding budget: every hero that uses it reserves at least
+     this much room below its own content, so the fade only ever dissolves
+     background and never text. */
+  .tt-fade {
+    position: absolute;
+    inset: auto 0 0;
+    z-index: -1;
+    height: 6rem;
+    pointer-events: none;
+    background: linear-gradient(to bottom, rgba(255, 255, 255, 0) 0%, #fff 92%);
+  }
+
+  @media (min-width: 768px) {
+    .tt-fade {
+      height: 8rem;
+    }
+  }
+
+  /* The faint dotted field for light sections, masked to a soft oval so it reads
+     as texture rather than as a pattern. */
+  .tt-dots {
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    pointer-events: none;
+    background-image: radial-gradient(rgba(15, 120, 196, 0.16) 1.1px, transparent 1.1px);
+    background-size: 20px 20px;
+    -webkit-mask-image: radial-gradient(closest-side, #000 0%, transparent 100%);
+    mask-image: radial-gradient(closest-side, #000 0%, transparent 100%);
+  }
+
+  /* --- Photographs and chips ------------------------------------------------ */
+
+  .tt-photo {
+    position: relative;
+    overflow: hidden;
+    border-radius: 1.5rem;
+    background: var(--color-brand-50);
+    box-shadow: 0 28px 55px -34px rgba(10, 15, 22, 0.8);
+    rotate: -2.5deg;
+    transition:
+      rotate 0.5s cubic-bezier(0.22, 1, 0.36, 1),
+      box-shadow 0.5s ease;
+  }
+
+  .tt-photo > img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
+  .tt-photo:hover {
+    rotate: -1deg;
+    box-shadow: 0 34px 62px -32px rgba(10, 15, 22, 0.85);
+  }
+
+  /* A circle rather than a rounded rectangle, so a pair of frames reads as two
+     kinds of frame and the ring keeps the circle from looking cropped. */
+  .tt-photo--round {
+    border-radius: 9999px;
+    rotate: 3deg;
+    box-shadow:
+      0 0 0 3px #fff,
+      0 0 0 4px var(--color-brand-100),
+      0 24px 46px -30px rgba(10, 15, 22, 0.85);
+  }
+
+  .tt-photo--round:hover {
+    rotate: 1deg;
+  }
+
+  /* A chip under or across a frame: what the photograph is of, never a control. */
+  .tt-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    margin-top: 0.7rem;
+    padding: 0.3rem 0.65rem;
+    border: 1px solid var(--color-brand-100);
+    border-radius: 9999px;
+    background: #fff;
+    box-shadow: 0 12px 26px -20px rgba(10, 15, 22, 0.7);
+    color: var(--color-brand-800);
+    font-size: 0.68rem;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    line-height: 1.2;
+    text-transform: uppercase;
+  }
+
+  .tt-chip-dot {
+    width: 0.4rem;
+    height: 0.4rem;
+    flex-shrink: 0;
+    border-radius: 9999px;
+    background: var(--color-brand-500);
+  }
+
+  .tt-chip-dot--accent {
+    background: var(--color-accent-500);
+  }
+
+  /* --- Section rhythm ------------------------------------------------------- */
+
+  /* The hairline-and-diamond that opens a white section: a tilted square at the
+     weight of a hairline, which is the logo's geometry reduced to punctuation. */
+  .tt-rule {
+    height: 1px;
+    background: linear-gradient(
+      90deg,
+      transparent 0%,
+      var(--color-ink-200) 22%,
+      var(--color-ink-200) 78%,
+      transparent 100%
+    );
+  }
+
+  .tt-rule-mark {
+    display: block;
+    width: 0.5rem;
+    height: 0.5rem;
+    flex-shrink: 0;
+    rotate: 45deg;
+    border: 1px solid var(--color-brand-200);
+    background: var(--color-brand-50);
+  }
+
+  /* The line and travelling light between two step badges. Drawn one per gap
+     rather than as a single line stretched behind a whole row: three opaque white
+     cards across 1280px would leave only slivers of a stretched path visible. */
+  .tt-connector {
+    position: relative;
+    overflow: hidden;
+    height: 1px;
+    flex: 1 1 auto;
+    background: var(--color-brand-100);
+  }
+
+  /* The travelling light is the gradient's own width rather than a fixed pixel
+     length, so `translateX(100%)` moves it exactly one connector-width at every
+     breakpoint. A px or vw value would desynchronise the connectors from their own
+     tracks at every width but one. */
+  .tt-connector::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(
+      90deg,
+      transparent 0%,
+      var(--color-brand-400) 50%,
+      transparent 100%
+    );
+    animation: tt-track 12s linear infinite;
+  }
+
+  /* --- Cards ---------------------------------------------------------------- */
+
+  .tt-card {
+    transition:
+      transform 0.35s cubic-bezier(0.22, 1, 0.36, 1),
+      border-color 0.35s ease,
+      box-shadow 0.35s ease;
+  }
+
+  /* `transform`, not the `translate` property: the reveal transition owns
+     `translate`, and a hover lift on the same element has to be a different
+     property or one of the two would cancel the other. */
+  .tt-card:hover {
+    transform: translateY(-5px);
+    border-color: var(--color-brand-200);
+    box-shadow: 0 26px 50px -32px rgba(18, 26, 36, 0.45);
+  }
+
+  .tt-card-icon {
+    transition:
+      background-color 0.35s ease,
+      color 0.35s ease,
+      transform 0.35s cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  .tt-card:hover .tt-card-icon {
+    background-color: var(--color-brand-600);
+    color: #fff;
+    transform: scale(1.04);
+  }
+
+  .tt-stat {
+    transition:
+      background-color 0.35s ease,
+      border-color 0.35s ease;
+  }
+
+  .tt-stat:hover {
+    background-color: rgba(255, 255, 255, 0.06);
+    border-color: var(--color-brand-700);
+  }
+
+  .tt-faq {
+    transition:
+      border-color 0.3s ease,
+      box-shadow 0.3s ease;
+  }
+
+  .tt-faq:hover {
+    border-color: var(--color-brand-200);
+  }
+
+  .tt-faq[open] {
+    border-color: var(--color-brand-200);
+    box-shadow: 0 20px 44px -34px rgba(18, 26, 36, 0.4);
+  }
+
+  /* --- Decorative geometry -------------------------------------------------- */
+
+  /* Two marks for the air a composition deliberately leaves: a tilted outline
+     square in brand blue, and the one orange bar. */
+  .tt-shape {
+    position: absolute;
+    z-index: 0;
+    pointer-events: none;
+    display: block;
+  }
+
+  .tt-shape--square {
+    top: 4%;
+    right: 3%;
+    width: 5rem;
+    height: 5rem;
+    border: 1px solid var(--color-brand-700);
+    rotate: 14deg;
+    animation: tt-orbit 9s ease-in-out infinite;
+  }
+
+  .tt-shape--bar {
+    right: 8%;
+    bottom: 6%;
+    width: 4.5rem;
+    height: 0.5rem;
+    border-radius: 9999px;
+    background: var(--color-accent-500);
+    rotate: -8deg;
+    animation: tt-slide 7s ease-in-out infinite;
+  }
+
+  @media (min-width: 1024px) {
+    .tt-shape--square {
+      width: 6.5rem;
+      height: 6.5rem;
+    }
+  }
+
+  /* The growth arc on a call to action, repeating the rising line so the opening
+     and closing gestures of a page are the same shape. */
+  .tt-arc {
+    stroke-dasharray: 30 620;
+    animation: tt-dash 11s linear infinite;
+  }
+
+  /* --- Motion --------------------------------------------------------------- */
+
+  @keyframes tt-dash {
+    from {
+      stroke-dashoffset: 646;
+    }
+
+    to {
+      stroke-dashoffset: 0;
+    }
+  }
+
+  @keyframes tt-track {
+    from {
+      translate: -100% 0;
+    }
+
+    to {
+      translate: 100% 0;
+    }
+  }
+
+  @keyframes tt-orbit {
+    0%,
+    100% {
+      rotate: 12deg;
+      translate: 0 0;
+    }
+
+    50% {
+      rotate: 19deg;
+      translate: 0 -6px;
+    }
+  }
+
+  @keyframes tt-slide {
+    0%,
+    100% {
+      translate: 0 0;
+      rotate: -8deg;
+    }
+
+    50% {
+      translate: 8px 0;
+      rotate: -3deg;
+    }
+  }
+
+  /* --- Reduced motion ------------------------------------------------------- */
+
+  @media (prefers-reduced-motion: reduce) {
+    .tt-path-line,
+    .tt-connector::after,
+    .tt-arc,
+    .tt-shape {
+      animation: none !important;
+    }
+
+    /* Parked at the start of their tracks rather than mid-animation, so the lines
+       and arcs read as the plain static rules they are. */
+    .tt-path-line,
+    .tt-arc {
+      stroke-dashoffset: 0;
+    }
+  }
+}

@@ -13,9 +13,8 @@ interface NavItem {
   anchor?: boolean
   /**
    * Stable identity for the list. Defaults to `to`, which is only safe while
-   * every entry points somewhere different — two entries may share a
-   * destination now that "Subjects" goes to the directory like "Find a Tutor"
-   * does. Labels are unique, so they are used as the key instead.
+   * every entry points somewhere different. Labels are unique, so they are used
+   * as the key instead.
    */
   key?: string
 }
@@ -26,29 +25,13 @@ interface NavItem {
  */
 const NAV_ITEMS: NavItem[] = [
   { to: '/tutors', label: 'Find a Tutor', key: 'find-a-tutor' },
-  { to: '/#how-it-works', label: 'How It Works', anchor: true, key: 'how-it-works' },
-  // The homepage's subject index is gone, so this goes to the directory, where
-  // subjects are a filter rather than a page of their own. Left pointing at
-  // /#subjects it would scroll a viewport and stop.
-  { to: '/tutors', label: 'Subjects', key: 'subjects' },
+  { to: '/how-it-works', label: 'How It Works', key: 'how-it-works' },
   { to: '/become-a-tutor', label: 'Become a Tutor', key: 'become-a-tutor' },
   { to: '/about', label: 'About', key: 'about' },
 ]
 
-/**
- * Announcement shown in the strip above the header.
- *
- * Set `NOTICE.text` to null to hide the strip entirely — it is a plain banner,
- * not a queue, so there is exactly one message at a time.
- */
-const NOTICE: { text: string; action?: { to: string; label: string } } = {
-  text: 'Tutor profiles are reviewed by our team before they go live.',
-  action: { to: '/become-a-tutor', label: 'Apply to teach' },
-}
-
 export function Navbar() {
   const [open, setOpen] = useState(false)
-  const [noticeDismissed, setNoticeDismissed] = useState(false)
   const location = useLocation()
   const { status, user } = useAuth()
   const panelId = 'primary-navigation'
@@ -98,47 +81,6 @@ export function Navbar() {
 
   return (
     <header ref={headerRef} className="sticky top-0 z-40">
-      {NOTICE.text && !noticeDismissed ? (
-        <div className="border-b border-notice-200 bg-notice-50">
-          <div className="mx-auto flex w-full max-w-7xl items-center gap-3 px-5 py-2 sm:px-8 lg:px-10">
-            <p className="flex-1 text-center text-[0.8rem] leading-snug text-notice-800 sm:text-sm">
-              {NOTICE.text}
-              {NOTICE.action ? (
-                <>
-                  {' '}
-                  <Link
-                    to={NOTICE.action.to}
-                    className="font-semibold text-notice-700 underline underline-offset-2 hover:text-notice-800"
-                  >
-                    {NOTICE.action.label}
-                  </Link>
-                </>
-              ) : null}
-            </p>
-            <button
-              type="button"
-              onClick={() => setNoticeDismissed(true)}
-              className="-mr-1 shrink-0 rounded p-1 text-notice-700 transition-colors hover:bg-notice-200 hover:text-notice-800"
-            >
-              <span className="sr-only">Dismiss announcement</span>
-              <svg
-                aria-hidden="true"
-                width="14"
-                height="14"
-                viewBox="0 0 14 14"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-              >
-                <path d="M3 3l8 8" />
-                <path d="M11 3l-8 8" />
-              </svg>
-            </button>
-          </div>
-        </div>
-      ) : null}
-
       <div className="border-b border-ink-950 bg-ink-950">
         <div className="mx-auto flex h-16 w-full max-w-7xl items-center justify-between gap-6 px-5 sm:px-8 lg:px-10">
           <Link

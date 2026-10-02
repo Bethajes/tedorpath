@@ -1,0 +1,394 @@
+/* ==========================================================================
+   The hero's ambient field — five hairline marks in the air the hero leaves.
+
+   Plain CSS, no animation dependency, and only `translate`, `rotate`, `opacity`
+   and `stroke-dashoffset` are ever animated, so the whole field stays on the
+   compositor. Same rules as `HeroVisual.css` and `brand/surfaces.css`: each
+   declaration names its own property rather than `transform`, so a drift, a
+   tilt and a placement never overwrite one another.
+
+   WHY A FIELD AT ALL. The hero's left half is type and the search card, its
+   right half is three photographs, and what is left is a large area of navy
+   doing nothing. This fills that air with the subject matter of a learning and
+   technology marketplace — a graph of nodes, a helix, a code fragment, geometry
+   and a circuit trace — at roughly a fifth of full strength, so it is noticed on
+   the second look rather than the first.
+
+   WHAT MAKES IT SAFE. Three things, in order of importance.
+
+     1. `z-index: -1`. The field is behind the content, in the same way `.tt-grid`,
+        `.tt-path` and `.tt-fade` are, and for the same reason: a decorative
+        layer over a headline is a legibility problem, while one behind it is a
+        texture. It cannot be clicked through either, hence `pointer-events: none`.
+     2. Placement in measured air. The desktop positions below are the gaps in
+        the composition at 1440px: the band under the top edge, the channel
+        between the two columns, and the strip to the right of the photographs.
+        Nothing is centred on the copy.
+     3. Slowness. The longest loop is two and a half minutes and the fastest is a
+        six-second breath. A field of quick marks is a screensaver; this is a page
+        somebody is reading.
+
+   THREE LAYERS OF MOTION, so no two marks ever move as a group: a drift loop per
+   mark (`.hf-float`), a slower counter-movement inside some of them so the pair
+   reads as depth rather than as one sliding image, and a scroll-linked parallax
+   on the whole field. The parallax is scroll-driven CSS behind `@supports`, so
+   it costs no JavaScript and no observer — where it is unsupported the field
+   simply drifts in place.
+
+   SIZES ARE IN PIXELS, POSITIONS IN PERCENTAGES. A mark's size is a design
+   decision and should not change with the viewport; its position is a
+   relationship to the composition and should.
+
+   Reduced motion: `index.css` collapses durations globally, and the block at the
+   bottom stops these loops outright, leaving the marks as the still drawings
+   they are drawn to be.
+   ========================================================================== */
+
+.hf {
+  position: absolute;
+  inset: 0;
+  /* Behind the content, inside the hero's own isolation context. */
+  z-index: -1;
+  pointer-events: none;
+  color: var(--color-brand-200);
+}
+
+/* The drift wrapper: positioned, and the only layer that carries placement. */
+.hf-float {
+  position: absolute;
+  display: block;
+}
+
+.hf-mark {
+  display: block;
+  width: 100%;
+  /* The height comes from the viewBox, so a mark keeps its proportions at every
+     size without a second declaration to keep in step. */
+  height: auto;
+}
+
+/* --- Placement ------------------------------------------------------------ */
+
+/* Phones first: the top band, above the headline, and only the two marks small
+   enough to sit in it. The stacked layout has no channel and no side gutters, so
+   the other three would be lying on the copy. */
+.hf-float--nodes {
+  top: 0.4%;
+  left: 5%;
+  width: 80px;
+  opacity: 0.2;
+}
+
+.hf-float--dna {
+  top: 0.5%;
+  right: 6%;
+  width: 22px;
+  opacity: 0.18;
+}
+
+.hf-float--code,
+.hf-float--math,
+.hf-float--circuit {
+  display: none;
+}
+
+@media (min-width: 640px) {
+  .hf-float--nodes {
+    top: 1%;
+    left: 6%;
+    width: 118px;
+  }
+
+  .hf-float--dna {
+    top: 1.2%;
+    right: 8%;
+    width: 28px;
+  }
+
+  /* Three marks in a line across the top band, read as one texture rather than
+     as three objects. */
+  .hf-float--code {
+    display: block;
+    top: 1.6%;
+    right: 24%;
+    width: 54px;
+    opacity: 0.18;
+  }
+}
+
+/* The spread arrangement, once the container has reached its 1280px maximum and
+   the composition has the gaps it is measured against. Below this the right-hand
+   column is too full for the field to sit beside the photographs. */
+@media (min-width: 1280px) {
+  /* The channel above the photographs, to the right of the headline. */
+  .hf-float--nodes {
+    top: 6%;
+    left: 52%;
+    width: 150px;
+  }
+
+  /* The strip to the right of the photographs. Percentage from the right edge, so
+     a wider viewport carries it further out into the gutter rather than back over
+     a face. */
+  .hf-float--dna {
+    top: 12%;
+    right: 4.5%;
+    width: 38px;
+  }
+
+  .hf-float--code {
+    top: 55%;
+    right: 2%;
+    width: 62px;
+  }
+
+  /* The channel itself, level with the lede and clear of both columns. */
+  .hf-float--math {
+    display: block;
+    top: 37%;
+    left: 51.5%;
+    width: 78px;
+    opacity: 0.16;
+  }
+
+  /* The dark top-left corner, above the eyebrow. */
+  .hf-float--circuit {
+    display: block;
+    top: 1.6%;
+    left: 5%;
+    width: 122px;
+    opacity: 0.18;
+  }
+}
+
+/* --- Motion --------------------------------------------------------------- */
+
+/* Idle drift. Six to ten pixels on a loop of half a minute, with four different
+   periods and negative delays so the marks are never in step. Amplitude is
+   deliberately smaller than `HeroVisual`'s frame float: those are photographs a
+   reader may be looking at, these are not. */
+.hf-float--nodes {
+  animation: hf-drift 34s ease-in-out -4s infinite;
+}
+
+.hf-float--dna {
+  animation: hf-drift-alt 41s ease-in-out -19s infinite;
+}
+
+.hf-float--code {
+  animation: hf-drift 46s ease-in-out -27s infinite;
+}
+
+.hf-float--math {
+  animation: hf-drift-alt 38s ease-in-out -11s infinite;
+}
+
+.hf-float--circuit {
+  animation: hf-drift 29s ease-in-out -22s infinite;
+}
+
+/* Counter-movement inside three of the marks, at a third of the amplitude and
+   roughly twice the period. The wrapper and its contents therefore travel
+   slightly out of step, which is what stops the field reading as one image
+   sliding around. */
+.hf-mark--nodes {
+  transform-origin: center;
+  animation: hf-sway 30s ease-in-out -8s infinite;
+}
+
+.hf-mark--dna {
+  transform-origin: center;
+  animation: hf-tilt 44s ease-in-out -13s infinite;
+}
+
+.hf-mark--circuit {
+  animation: hf-sway-alt 36s ease-in-out -21s infinite;
+}
+
+/* The geometry turns once, very slowly. A triangle inside a circle is the one
+   mark here that can rotate all the way round without looking wrong. */
+.hf-mark--math {
+  transform-origin: center;
+  animation: hf-turn 150s linear infinite;
+}
+
+/* Light running along the trace: a continuous line with one clear gap in it, the
+   gap travelling the length of the path and the pattern landing back on itself
+   once per loop. The dash is long enough that the trace still reads as a line
+   with both of its pads attached — a sparser one reads as broken debris. */
+.hf-trace {
+  stroke-dasharray: 124 36;
+  animation: hf-trace 18s linear infinite;
+}
+
+/* A pad and a node breathing, at different periods. Opacity only — a ring that
+   grew would have to know its own centre, and a growing ring is the one gesture
+   on a premium surface that reads as a notification. */
+.hf-mark--nodes .hf-breathe {
+  animation: hf-breathe 9s ease-in-out infinite;
+}
+
+.hf-mark--circuit .hf-breathe {
+  animation: hf-breathe 11s ease-in-out -5s infinite;
+}
+
+/* The cursor. Slow enough to be a pulse rather than a blink. */
+.hf-caret {
+  animation: hf-blink 6s ease-in-out infinite;
+}
+
+@keyframes hf-drift {
+  0%,
+  100% {
+    translate: 0 0;
+  }
+
+  50% {
+    translate: 7px -9px;
+  }
+}
+
+@keyframes hf-drift-alt {
+  0%,
+  100% {
+    translate: 0 0;
+  }
+
+  50% {
+    translate: -6px 8px;
+  }
+}
+
+@keyframes hf-sway {
+  0%,
+  100% {
+    rotate: 0deg;
+    translate: 0 0;
+  }
+
+  50% {
+    rotate: 3deg;
+    translate: 0 4px;
+  }
+}
+
+@keyframes hf-sway-alt {
+  0%,
+  100% {
+    translate: 0 0;
+  }
+
+  50% {
+    translate: 0 -5px;
+  }
+}
+
+@keyframes hf-tilt {
+  0%,
+  100% {
+    rotate: -2deg;
+  }
+
+  50% {
+    rotate: 2deg;
+  }
+}
+
+@keyframes hf-turn {
+  to {
+    rotate: 360deg;
+  }
+}
+
+@keyframes hf-trace {
+  from {
+    stroke-dashoffset: 0;
+  }
+
+  to {
+    /* One dash plus one gap, which is the path's full length: the pattern lands
+       back on itself rather than restarting. */
+    stroke-dashoffset: -160;
+  }
+}
+
+@keyframes hf-breathe {
+  0%,
+  100% {
+    opacity: 0.55;
+  }
+
+  50% {
+    opacity: 0.1;
+  }
+}
+
+@keyframes hf-blink {
+  0%,
+  100% {
+    opacity: 0.85;
+  }
+
+  50% {
+    opacity: 0.12;
+  }
+}
+
+/* --- Parallax ------------------------------------------------------------- */
+
+/*
+  The field as one plane, moving against the scroll. `scroll(root block)` is the
+  document's own scroll, so this needs no scroll listener, no observer and no
+  state: where the browser has scroll-driven animations the marks gain depth,
+  and where it does not they drift in place and nothing else changes.
+*/
+@supports (animation-timeline: scroll()) {
+  @media (prefers-reduced-motion: no-preference) {
+    .hf {
+      /* Longhands rather than the shorthand, so that a browser which cannot parse
+         `animation-duration: auto` drops that one declaration and still gets the
+         timeline — and so a `0s` duration is never the one that survives. The
+         spec treats a zero duration on a progress-based timeline as `auto`
+         anyway; this does not have to rely on it. */
+      animation-name: hf-parallax;
+      animation-duration: auto;
+      animation-timing-function: linear;
+      /* Holds the field still before the range starts and after it ends, so the
+         marks never snap when the reader stops scrolling. */
+      animation-fill-mode: both;
+      animation-timeline: scroll(root block);
+      /* Finished by the time the hero has left the screen, so the marks are
+         still by the time the reader can see them. */
+      animation-range: 0 100vh;
+    }
+  }
+}
+
+@keyframes hf-parallax {
+  from {
+    translate: 0 0;
+  }
+
+  to {
+    /* Barely half the height of a mark's drift, and upward: the field settles
+       back as the page moves on. */
+    translate: 0 -54px;
+  }
+}
+
+/* --- Reduced motion ------------------------------------------------------- */
+
+@media (prefers-reduced-motion: reduce) {
+  .hf,
+  .hf-float,
+  .hf-mark,
+  .hf-mark * {
+    animation: none !important;
+  }
+
+  /* Parked at the start of the trace rather than mid-travel, so it reads as the
+     plain right-angled line it is drawn to be. */
+  .hf-trace {
+    stroke-dashoffset: 0;
+  }
+}

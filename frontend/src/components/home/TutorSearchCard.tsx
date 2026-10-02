@@ -48,7 +48,7 @@ export function TutorSearchCard() {
   return (
     <form
       onSubmit={onSubmit}
-      className="rounded-2xl border border-ink-200 bg-white p-5 shadow-[0_10px_40px_-18px_rgba(18,26,36,0.28)] sm:p-6"      aria-labelledby="tutor-search-heading"
+      className="rounded-[1.5rem] border border-ink-200/70 bg-white p-5 shadow-[0_30px_60px_-30px_rgba(10,15,22,0.55)] sm:p-6"      aria-labelledby="tutor-search-heading"
     >
       <h2
         id="tutor-search-heading"
@@ -129,7 +129,7 @@ export function TutorSearchCard() {
         <button
           type="submit"
           data-tedor-cta
-          className="group inline-flex w-full items-center justify-center gap-2 rounded-lg bg-brand-600 px-5 py-3.5 text-base font-medium text-white shadow-sm transition-colors hover:bg-brand-700"
+          className="group inline-flex w-full items-center justify-center gap-2 rounded-xl bg-accent-500 px-5 py-3.5 text-base font-semibold text-white shadow-[0_14px_30px_-14px_rgba(245,128,31,0.9)] transition-[background-color,box-shadow,transform] duration-200 hover:-translate-y-0.5 hover:bg-accent-400 hover:shadow-[0_18px_36px_-14px_rgba(245,128,31,0.95)]"
         >
           Find a Tutor
           <svg
@@ -142,7 +142,7 @@ export function TutorSearchCard() {
             strokeWidth="2"
             strokeLinecap="round"
             strokeLinejoin="round"
-            className="transition-transform duration-150 group-hover:translate-x-0.5"
+            className="transition-transform duration-200 group-hover:translate-x-1"
           >
             <path d="M2 8h11" />
             <path d="M9 4l4 4-4 4" />

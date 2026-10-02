@@ -5,9 +5,9 @@ import { placeholderImage, type PlaceholderScene } from './heroPhotoArt'
  *
  * Three frames, each doing a different job in the story the composition tells:
  * the learner who arrives with something to learn, the tutor who meets them,
- * and the lesson itself happening between them. They are placed around the
- * existing learning-path graphic rather than beside it in a row, so the
- * graphic stays the subject and the people read as the reason it exists.
+ * and the lesson itself happening between them. They are layered into one
+ * arrangement rather than set side by side in a row, and they are the whole
+ * visual — there is no diagram for them to sit around.
  *
  * PHOTOGRAPHY. The frames carry real photographs from `public/homepage_images`.
  * A slot with no `src` falls back to the flat brand-coloured scene in
@@ -102,10 +102,14 @@ export const HERO_PHOTOS: readonly HeroPhoto[] = [
     src: '/homepage_images/online_tutoring.jpeg',
     alt: 'A learner at a desk joining an online lesson with a tutor on the screen',
     label: 'Online tutoring',
-    ratioClass: 'aspect-[3/4]',
-    // Keeps the learner's shoulder in the foreground and the tutor on the
-    // screen at the far side, which is the whole point of the picture.
-    objectPosition: '28% center',
+    // Square, not portrait: this frame sits under the subject, and a portrait
+    // crop here made the whole stack taller than the column it stands in.
+    ratioClass: 'aspect-square',
+    // The tutor's face on the screen is the point of this picture, so the crop
+    // is pushed right of centre to keep the screen whole and the learner's
+    // shoulder in the foreground. A centred or left crop takes the screen and
+    // leaves a back of a head.
+    objectPosition: '58% center',
     scene: 'online',
     tone: 'brand',
   },

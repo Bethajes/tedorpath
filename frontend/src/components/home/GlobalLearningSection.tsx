@@ -1,7 +1,9 @@
 import { Link } from 'react-router-dom'
 
 import { Container } from '@/components/layout/PageShell'
+import { Reveal } from '@/components/ui/Reveal'
 
+import '../brand/surfaces.css'
 import './GlobalLearningSection.css'
 
 /**
@@ -61,9 +63,10 @@ const MERIDIANS = [
 
 export function GlobalLearningSection() {
   return (
-    <section className="section-y bg-ink-50" aria-labelledby="international-heading">
+    <section className="section-y bg-white" aria-labelledby="international-heading">
       <Container>
-        <div className="relative overflow-hidden rounded-3xl bg-ink-950 px-6 py-14 sm:px-12 sm:py-16 lg:px-16">
+        <div className="tt-hero relative isolate overflow-hidden rounded-3xl px-6 py-14 sm:px-12 sm:py-16 lg:px-16">
+          <div aria-hidden="true" className="tt-grid" />
           <svg
             aria-hidden="true"
             viewBox="0 0 460 400"
@@ -141,19 +144,21 @@ export function GlobalLearningSection() {
           />
 
           <div className="relative max-w-2xl">
-            <p className="text-sm font-semibold uppercase tracking-[0.12em] text-brand-300">
-              International
-            </p>
-            <h2
-              id="international-heading"
-              className="mt-3 text-3xl font-bold tracking-[-0.02em] text-white sm:text-4xl"
-            >
-              Learning without borders.
-            </h2>
-            <p className="mt-4 text-lg leading-relaxed text-brand-100">
-              Whether you&apos;re learning from Addis Ababa or connecting from somewhere around the
-              world, Tedor Tutors makes quality tutoring accessible wherever you are.
-            </p>
+            <Reveal>
+              <p className="text-sm font-semibold uppercase tracking-[0.14em] text-brand-300">
+                International
+              </p>
+              <h2
+                id="international-heading"
+                className="mt-3 text-3xl font-bold tracking-[-0.025em] text-white sm:text-4xl"
+              >
+                Learning without borders.
+              </h2>
+              <p className="mt-4 text-lg leading-relaxed text-brand-100">
+                Whether you&apos;re learning from Addis Ababa or connecting from somewhere around
+                the world, Tedor Tutors makes quality tutoring accessible wherever you are.
+              </p>
+            </Reveal>
 
             <ul className="mt-10 grid gap-x-8 gap-y-6 sm:grid-cols-2">
               {[

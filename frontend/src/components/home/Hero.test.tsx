@@ -5,6 +5,7 @@ import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { Hero } from './Hero'
+import { HERO_PHOTOS } from './heroPhotos'
 import { OTHER_SUBJECT_ENTRY, SUBJECT_GROUPS } from './subjectCatalog'
 import { EDUCATION_LEVELS, LEARNING_MODES, SUBJECTS } from '@/features/tutorRequest/tutorRequest.constants'
 
@@ -246,8 +247,68 @@ describe('Hero — content and secondary action', () => {
     }
   })
 
-  it('still embeds the learning graphic, which owns the reduced-motion behaviour', () => {
+  it('puts the people first in the right-hand column', () => {
     renderHero()
-    expect(screen.getByRole('img', { name: /learning journey/i })).toBeInTheDocument()
+
+    // The visual is three photographs of learners and tutors, and nothing else.
+    const images = screen.getAllByRole('img')
+    expect(images).toHaveLength(HERO_PHOTOS.length)
+    for (const image of images) {
+      expect(image).toHaveAttribute('alt')
+      expect(image.getAttribute('alt')?.length ?? 0).toBeGreaterThan(20)
+    }
+    expect(screen.queryByRole('img', { name: /learning journey|path to your goal/i })).toBeNull()
+  })
+})
+
+// ---------------------------------------------------------------------------
+// The ambient field: decoration, and only decoration
+// ---------------------------------------------------------------------------
+
+describe('Hero — the ambient background field', () => {
+  it('is hidden from assistive technology and holds nothing focusable', () => {
+    renderHero()
+
+    // One `aria-hidden` wrapper covers all five marks, which is why the field can
+    // be as dense as it likes without a screen reader announcing a helix.
+    const field = document.querySelector('.hf')
+    expect(field).not.toBeNull()
+    expect(field).toHaveAttribute('aria-hidden', 'true')
+
+    // Purely decorative means purely decorative: no role, no label, no tab stop,
+    // and nothing that a pointer could be aimed at.
+    expect(field?.querySelectorAll('[role]')).toHaveLength(0)
+    expect(field?.querySelectorAll('a, button, input, [tabindex]')).toHaveLength(0)
+    expect(field?.textContent?.trim() ?? '').toBe('')
+
+    // And the drawings it is made of are not announced as images either.
+    expect(screen.getAllByRole('img')).toHaveLength(HERO_PHOTOS.length)
+  })
+
+  it('states no fact: no number, no count, no claim, no label', () => {
+    renderHero()
+
+    // The marks are the subject matter of a learning and technology marketplace,
+    // never a claim about it. Requirement 14.1: nothing on this page may imply
+    // scale, quality or accreditation, and a decorative layer is the easiest
+    // place for such a thing to be added by accident.
+    const field = document.querySelector('.hf')
+    const marks = Array.from(field?.querySelectorAll('svg') ?? [])
+
+    expect(marks.length).toBeGreaterThanOrEqual(5)
+    for (const mark of marks) {
+      expect(mark.getAttribute('aria-hidden') ?? 'true').toBe('true')
+      expect(mark.textContent ?? '').toBe('')
+    }
+
+    const hero = document.querySelector('.tt-hero')?.textContent ?? ''
+    for (const claim of [
+      /\b\d/,
+      /free trial/i,
+      /certified|accredited|verified|background check/i,
+      /guaranteed/i,
+    ]) {
+      expect(hero, `hero must not claim ${claim}`).not.toMatch(claim)
+    }
   })
 })

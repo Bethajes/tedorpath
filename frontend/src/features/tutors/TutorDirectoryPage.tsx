@@ -10,6 +10,7 @@ import type { TutorCardDTO, TutorFilters, TutorPagination, TutorSortOption } fro
 import { TutorCard } from './components/TutorCard'
 import { FilterPanel } from './components/FilterPanel'
 import { EmptyState } from './components/EmptyState'
+import { RequestTutorPanel } from './components/RequestTutorPanel'
 import { useAsyncData } from '@/lib/useAsyncData'
 
 function filtersFromParams(params: URLSearchParams): TutorFilters {
@@ -198,6 +199,16 @@ export function TutorDirectoryPage() {
             Browse approved tutors and find the right match for you.
           </p>
         </header>
+
+        {/*
+          Above the search form rather than beside the results: the request
+          form is the alternative to searching, so it is offered before the
+          visitor starts, and it stays put — a parent who filters down to
+          nothing and comes back up still has it. Deliberately outside the
+          loading, error and empty branches, so it is available even when the
+          list cannot be fetched at all.
+        */}
+        <RequestTutorPanel filters={filters} />
 
         <form onSubmit={handleSearchSubmit} role="search" className="mb-6 flex gap-2">
           <label htmlFor="tutor-search" className="sr-only">

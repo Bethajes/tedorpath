@@ -1,7 +1,19 @@
 import { Link } from 'react-router-dom'
 
+import { TrustSection } from '@/components/about/TrustSection'
 import { Container, PageShell } from '@/components/layout/PageShell'
 
+/**
+ * /about — the page that says what the platform is and why it can be relied on.
+ *
+ * The argument, in the order it is made: what Tedor does, the four claims it can
+ * defend (TrustSection, carried here rather than on the homepage), the door for
+ * tutors, and the door for learners.
+ *
+ * Reading measure throughout: `max-w-3xl` inside a padded `PageShell`, so the
+ * section components here lay themselves out inline rather than as full-width
+ * bands the way the homepage and /how-it-works do.
+ */
 export function AboutPage() {
   return (
     <PageShell>
@@ -24,6 +36,8 @@ export function AboutPage() {
             skill, tell us where you are and we will help you take the next step.
           </p>
         </div>
+
+        <TrustSection />
 
         <section
           id="become-a-tutor"

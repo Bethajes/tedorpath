@@ -7,23 +7,25 @@ import type { Testimonial } from './testimonialData'
  * One learner experience, shaped like a marketplace review.
  *
  * TRUST RULES ENFORCED HERE. This card is where invented social proof would
- * otherwise enter the site, so three things are refused at render time rather
+ * otherwise enter the site, so two things are refused at render time rather
  * than trusted to the data file:
  *
- *   1. No demo entry can be badged "Verified". A "Verified learner" chip is a
- *      claim that a real person stands behind the words, and no placeholder
- *      does. `isVerified && !isDemo` decides the badge, so flipping `isVerified`
- *      by accident in the data file does not put the chip on screen.
- *   2. No rating is invented. Stars render only when `rating` is present and
+ *   1. No rating is invented. Stars render only when `rating` is present and
  *      usable; there is no default, no floor of "at least one star", and no
- *      aggregate score. Demo entries may carry a rating because they are
- *      labelled "Sample" in the same breath; real entries must wait for the API.
- *   3. No count. Not "1 of 5", not a review total, not an average. The section's
+ *      aggregate score. Two of the real records carry no score, so the no-stars
+ *      layout is the common case on this page rather than a theoretical one.
+ *   2. No count. Not "1 of 5", not a review total, not an average. The section's
  *      sense of scale comes from the number of cards the reader can see.
+ *
+ * There was a third rule here once — demo content could not be badged
+ * "Verified" — and it is gone because there is no longer any demo content to
+ * guard. `isVerified` is now the badge on its own, and every bundled record
+ * sets it to `false`, so the badge renders on nothing until the platform holds a
+ * review it can point at.
  *
  * The badge text is also deliberately not a claim about screening: "Verified
  * learner" says the review is real and held by the platform. It must never read
- * as "background checked" or "university verified" — see VerificationSteps for
+ * as "background checked" or "university verified" — see TrustSection for
  * what review actually covers.
  *
  * Markup is a <figure>/<blockquote>/<figcaption> so the quote is announced as a
@@ -112,30 +114,74 @@ function Avatar({ testimonial }: { testimonial: Testimonial }) {
 /**
  * The star row.
  *
- * Rendered only for a usable `rating`. `fill="currentColor"` is set per star
- * rather than on the row, so a 4.2 rounded rating cannot be drawn as five full
- * stars, and the filled count is the whole number we were actually given.
+ * Drawn as an outline row with the filled stars laid over it, so a rating with a
+ * fraction fills the last star partially: 4.8 is four stars and four fifths of
+ * the fifth, not four and not five. Whole-star logic would have had to pick one
+ * of those two, and both are a score nobody gave.
+ *
+ * Only the fractional star is clipped, and it is clipped against its own width
+ * rather than against the width of the whole row. A single percentage overlay
+ * across the full row is the shorter implementation and it is wrong by up to one
+ * gap: at a rating of 1 it reaches 16px of an 81px row, which is the first star
+ * plus a quarter of the gap — enough to leave a visible sliver of the second
+ * star filled at every whole number.
+ *
  * `aria-hidden` because the row is followed by the rating in words, which is
  * what a screen reader should read instead of five identical glyphs.
  */
 function Stars({ rating }: { rating: number }) {
+  const star = (filled: boolean) => (
+    <svg
+      width="13"
+      height="13"
+      viewBox="0 0 20 20"
+      fill={filled ? 'currentColor' : 'none'}
+      stroke="currentColor"
+      strokeWidth="1.4"
+      strokeLinejoin="round"
+    >
+      <path d={STAR_PATH} />
+    </svg>
+  )
+
+  // Clamped rather than trusted: the value is validated upstream, and a stray 6
+  // should overfill the fifth star at worst, not spill a sixth star out of the
+  // card.
+  const clamped = Math.min(5, Math.max(0, rating))
+  const whole = Math.floor(clamped)
+  const fraction = clamped - whole
+
   return (
     <span className="inline-flex items-center gap-1" aria-hidden="true">
-      {Array.from({ length: 5 }, (_, index) => (
-        <svg
-          key={index}
-          width="13"
-          height="13"
-          viewBox="0 0 20 20"
-          fill={index < rating ? 'currentColor' : 'none'}
-          stroke="currentColor"
-          strokeWidth="1.4"
-          strokeLinejoin="round"
-          className={index < rating ? 'text-accent-500' : 'text-ink-200'}
-        >
-          <path d={STAR_PATH} />
-        </svg>
-      ))}
+      {Array.from({ length: 5 }, (_, index) => {
+        if (index < whole) {
+          return (
+            <span key={index} className="text-accent-500">
+              {star(true)}
+            </span>
+          )
+        }
+
+        if (index !== whole || fraction <= 0) {
+          return (
+            <span key={index} className="text-ink-200">
+              {star(false)}
+            </span>
+          )
+        }
+
+        return (
+          <span key={index} className="relative inline-block h-[13px] w-[13px]">
+            <span className="block text-ink-200">{star(false)}</span>
+            <span
+              className="absolute inset-y-0 left-0 block overflow-hidden text-accent-500"
+              style={{ width: `${fraction * 100}%` }}
+            >
+              {star(true)}
+            </span>
+          </span>
+        )
+      })}
     </span>
   )
 }
@@ -148,8 +194,7 @@ export interface TestimonialCardProps {
 }
 
 export function TestimonialCard({ testimonial, className, tone = 'plain' }: TestimonialCardProps) {
-  // Trust rule 1: demo content is never badged as verified. See the note above.
-  const showVerified = testimonial.isVerified && !testimonial.isDemo
+  const showVerified = testimonial.isVerified
   const meta = [testimonial.subject, testimonial.location].filter(Boolean).join(' • ')
 
   return (
@@ -179,7 +224,7 @@ export function TestimonialCard({ testimonial, className, tone = 'plain' }: Test
         <p className="text-[0.95rem] leading-relaxed text-ink-700">{testimonial.quote}</p>
       </blockquote>
 
-      {/* Trust rule 2: no default rating. Absent data renders nothing. */}
+      {/* Trust rule 1: no default rating. Absent data renders nothing. */}
       {testimonial.rating ? (
         <p className="mt-5 flex items-center gap-2">
           <Stars rating={testimonial.rating} />
@@ -197,34 +242,26 @@ export function TestimonialCard({ testimonial, className, tone = 'plain' }: Test
           </span>
           <span className="mt-0.5 block text-sm text-ink-500">{meta}</span>
 
-          {/* Only rendered when there is a badge to put in it, so a real
-              unverified review does not carry a reserved strip of empty space. */}
-          {showVerified || testimonial.isDemo ? (
+          {/* Only rendered when there is a badge to put in it, so a review the
+              platform does not hold carries no reserved strip of empty space. */}
+          {showVerified ? (
             <span className="mt-2 flex flex-wrap gap-1.5">
-              {showVerified ? (
-                <span className="tw-badge inline-flex items-center gap-1 rounded-full bg-brand-50 px-2 py-0.5 text-[0.7rem] font-semibold text-brand-700 ring-1 ring-inset ring-brand-200">
-                  <svg
-                    aria-hidden="true"
-                    width="11"
-                    height="11"
-                    viewBox="0 0 16 16"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2.2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  >
-                    <path d="M3 8.5l3.2 3.2L13 5" />
-                  </svg>
-                  Verified learner
-                </span>
-              ) : null}
-
-              {testimonial.isDemo ? (
-                <span className="tw-badge inline-flex items-center rounded-full bg-ink-100 px-2 py-0.5 text-[0.7rem] font-medium text-ink-600 ring-1 ring-inset ring-ink-200">
-                  Sample
-                </span>
-              ) : null}
+              <span className="tw-badge inline-flex items-center gap-1 rounded-full bg-brand-50 px-2 py-0.5 text-[0.7rem] font-semibold text-brand-700 ring-1 ring-inset ring-brand-200">
+                <svg
+                  aria-hidden="true"
+                  width="11"
+                  height="11"
+                  viewBox="0 0 16 16"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2.2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <path d="M3 8.5l3.2 3.2L13 5" />
+                </svg>
+                Verified learner
+              </span>
             </span>
           ) : null}
         </span>

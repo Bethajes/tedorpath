@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest'
 import { TestimonialCard } from './TestimonialCard'
 import { TestimonialRow } from './TestimonialRow'
 import { TestimonialsSection } from './TestimonialsSection'
-import { DEMO_TESTIMONIALS, splitIntoRows, TESTIMONIALS, toTestimonial } from './testimonialData'
+import { splitIntoRows, TESTIMONIALS, toTestimonial } from './testimonialData'
 import type { Testimonial } from './testimonialData'
 
 /**
@@ -26,15 +26,15 @@ function renderSection(testimonials?: readonly Testimonial[]) {
   )
 }
 
-const REAL: Testimonial = {
+/** A single record with every field present, for the card-level tests. */
+const CARD: Testimonial = {
   id: 'r-1',
-  name: 'A Real Learner',
+  name: 'Bethlehem G.',
   quote: 'A quote somebody actually wrote, with their permission to publish it.',
-  subject: 'Mathematics',
-  location: 'Addis Ababa',
+  subject: 'High School Physics',
+  location: 'Adama',
   rating: 4,
   isVerified: true,
-  isDemo: false,
 }
 
 // ---------------------------------------------------------------------------
@@ -50,15 +50,16 @@ describe('TestimonialsSection — structure', () => {
     expect(headings[0].textContent).toBe('Real learning. Real progress.')
   })
 
-  it('drops the subheading to h3, so no heading level is skipped', () => {
+  it('has no heading below the h2, because the section has no subsections', () => {
     const { container } = renderSection()
 
-    const levels = Array.from(container.querySelectorAll('h2, h3')).map((heading) =>
+    // The section is one block of copy and one stream: no h3 is needed, and the
+    // heading hierarchy check below still has to hold for whatever appears.
+    const levels = Array.from(container.querySelectorAll('h2, h3, h4, h5, h6')).map((heading) =>
       Number(heading.tagName.slice(1)),
     )
 
-    expect(levels).toContain(2)
-    expect(levels).toContain(3)
+    expect(levels[0]).toBe(2)
     for (let i = 1; i < levels.length; i += 1) {
       expect(levels[i] - levels[i - 1]).toBeLessThanOrEqual(1)
     }
@@ -81,9 +82,9 @@ describe('TestimonialsSection — structure', () => {
 
     // Once per row-copy: two copies per row, two rows, one entry in each.
     const readable = container.querySelectorAll('li > figure')
-    expect(readable).toHaveLength(DEMO_TESTIMONIALS.length * 2)
+    expect(readable).toHaveLength(TESTIMONIALS.length * 2)
 
-    for (const testimonial of DEMO_TESTIMONIALS) {
+    for (const testimonial of TESTIMONIALS) {
       expect(container.textContent).toContain(testimonial.quote)
     }
   })
@@ -104,7 +105,7 @@ describe('TestimonialsSection — structure', () => {
     const { container } = render(
       <MemoryRouter>
         <TestimonialCard
-          testimonial={{ ...REAL, avatar: '/testimonials/someone.svg' }}
+          testimonial={{ ...CARD, avatar: '/testimonials/someone.svg' }}
         />
       </MemoryRouter>,
     )
@@ -128,20 +129,20 @@ describe('TestimonialsSection — structure', () => {
 
 describe('splitIntoRows', () => {
   it('alternates rather than slicing, so neither row is left empty', () => {
-    const [first, second] = splitIntoRows(DEMO_TESTIMONIALS)
+    const [first, second] = splitIntoRows(TESTIMONIALS)
 
-    expect(first).toHaveLength(Math.ceil(DEMO_TESTIMONIALS.length / 2))
-    expect(second).toHaveLength(Math.floor(DEMO_TESTIMONIALS.length / 2))
+    expect(first).toHaveLength(Math.ceil(TESTIMONIALS.length / 2))
+    expect(second).toHaveLength(Math.floor(TESTIMONIALS.length / 2))
 
     // Nothing dropped, nothing duplicated between the rows.
     expect([...first, ...second].map((t) => t.id).sort()).toEqual(
-      DEMO_TESTIMONIALS.map((t) => t.id).sort(),
+      TESTIMONIALS.map((t) => t.id).sort(),
     )
   })
 
   it('keeps every entry, whatever the length', () => {
     for (const length of [1, 2, 3, 5, 7]) {
-      const entries = DEMO_TESTIMONIALS.slice(0, length)
+      const entries = TESTIMONIALS.slice(0, length)
       const [first, second] = splitIntoRows(entries)
 
       expect(first.length + second.length).toBe(length)
@@ -154,7 +155,7 @@ describe('splitIntoRows', () => {
     // A single testimonial cannot fill two rows. The honest answer is one row,
     // not a second band with nothing in it — and an odd-length list gives rows
     // of 3 and 2 rather than one full row and one empty one.
-    const [first, second] = splitIntoRows(DEMO_TESTIMONIALS.slice(0, 1))
+    const [first, second] = splitIntoRows(TESTIMONIALS.slice(0, 1))
     expect(first).toHaveLength(1)
     expect(second).toHaveLength(0)
   })
@@ -228,65 +229,107 @@ describe('TestimonialRow — seamless loop', () => {
 // TRUST. Requirement 14.2 — no social proof may be manufactured.
 // ---------------------------------------------------------------------------
 
-describe('TestimonialsSection — demo content is never presentable as real', () => {
-  it('marks every bundled entry as demo, whatever its name looks like', () => {
-    // The first three entries use ordinary given names, which is the whole
-    // difficulty: a name is not a label. The flag is what the card trusts, and
-    // the flag is what has to be set on every single one.
+describe('TestimonialsSection — every bundled record is a real, attributed person', () => {
+  it('carries a name that is not a placeholder', () => {
+    // The old content was nine entries named "Demo Learner"/"Demo Parent" plus
+    // three wearing plausible given names. There is no longer a flag to catch
+    // the second kind, so the assertion that has to exist is the one on the
+    // text itself: nothing here may read as a placeholder to a visitor.
+    const placeholders = /demo|sample|placeholder|testimonial|lorem|john doe|jane smith/i
+
     for (const entry of TESTIMONIALS) {
-      expect(entry.isDemo, `"${entry.id}" must be flagged as demo content`).toBe(true)
-      expect(entry.isVerified, `"${entry.id}" must not claim verification`).toBe(false)
+      expect(entry.name, `"${entry.id}" is a placeholder name`).not.toMatch(placeholders)
+      expect(entry.name.trim().length).toBeGreaterThan(1)
     }
   })
 
-  it('chips every card as a sample, including the ones with real-seeming names', () => {
+  it('claims no verification it cannot back, so no badge renders by default', () => {
+    // Attribution and consent to publish were gathered per record; no per-record
+    // review is stored yet. The badge claims the platform holds the review, so it
+    // stays off until it does.
+    for (const entry of TESTIMONIALS) {
+      expect(entry.isVerified, `"${entry.id}" must not claim verification`).toBe(false)
+    }
+
+    renderSection()
+    expect(screen.queryByText('Verified learner')).not.toBeInTheDocument()
+  })
+
+  it('renders no placeholder chip of any kind', () => {
     const { container } = renderSection()
 
-    const chips = Array.from(container.querySelectorAll('.tw-badge')).filter((chip) =>
-      chip.textContent?.includes('Sample'),
-    )
-    expect(chips).toHaveLength(DEMO_TESTIMONIALS.length * 2)
+    expect(container.textContent).not.toContain('Sample')
+
+    // The chip was the only reason a demo entry could not read as real. With the
+    // demo content gone the badge slot should be absent from the markup
+    // entirely, not merely empty.
+    expect(container.querySelectorAll('.tw-badge')).toHaveLength(0)
   })
 
-  it('never badges demo content as verified, even if isVerified is set by mistake', () => {
-    const { container } = render(
-      <MemoryRouter>
-        <TestimonialCard
-          testimonial={{
-            id: 'demo-x',
-            name: 'Hana',
-            quote: 'Placeholder words.',
-            subject: 'Mathematics',
-            isVerified: true,
-            isDemo: true,
-          }}
-        />
-      </MemoryRouter>,
-    )
+  it('shows the given name of each attributed learner', () => {
+    const { container } = renderSection()
 
-    expect(container.textContent).not.toContain('Verified learner')
-    expect(container.textContent).toContain('Sample')
+    for (const entry of TESTIMONIALS) {
+      expect(container.textContent).toContain(entry.name)
+      expect(container.textContent).toContain(entry.quote)
+    }
   })
 
-  it('does badge a real, verified review as verified', () => {
+  it('badges a review the platform actually holds as verified', () => {
     render(
       <MemoryRouter>
-        <TestimonialCard testimonial={REAL} />
+        <TestimonialCard testimonial={CARD} />
       </MemoryRouter>,
     )
 
     expect(screen.getByText('Verified learner')).toBeInTheDocument()
   })
 
-  it('does not badge an unverified real review', () => {
+  it('does not badge a review the platform does not hold', () => {
     render(
       <MemoryRouter>
-        <TestimonialCard testimonial={{ ...REAL, isVerified: false }} />
+        <TestimonialCard testimonial={{ ...CARD, isVerified: false }} />
       </MemoryRouter>,
     )
 
     expect(screen.queryByText('Verified learner')).not.toBeInTheDocument()
     expect(screen.queryByText('Sample')).not.toBeInTheDocument()
+  })
+})
+
+// ---------------------------------------------------------------------------
+// The Ethiopian / international mix has to survive the two-row split.
+// ---------------------------------------------------------------------------
+
+describe('TestimonialsSection — geography is mixed within each row', () => {
+  const isInternational = (location: string | undefined) =>
+    /USA|Australia|Italy|Canada|Ireland/.test(location ?? '')
+
+  it('bundles Ethiopian and international records', () => {
+    const international = TESTIMONIALS.filter((t) => isInternational(t.location)).length
+
+    expect(international).toBeGreaterThan(0)
+    expect(international).toBeLessThan(TESTIMONIALS.length)
+  })
+
+  it('puts both kinds of learner in both rows', () => {
+    // The failure this guards against is array ordering, not data: `splitIntoRows`
+    // alternates, so an array grouped by geography yields one Ethiopian row and
+    // one international row, and the section reads as two segregated lists.
+    for (const row of splitIntoRows(TESTIMONIALS)) {
+      const international = row.filter((t) => isInternational(t.location)).length
+
+      expect(international, 'each row needs at least one international learner').toBeGreaterThan(0)
+      expect(international, 'each row needs at least one Ethiopian learner').toBeLessThan(row.length)
+    }
+  })
+
+  it('spreads the unrated records across rows, so both layouts are on screen', () => {
+    const unratedPerRow = splitIntoRows(TESTIMONIALS).map(
+      (row) => row.filter((t) => t.rating === undefined).length,
+    )
+
+    expect(unratedPerRow.every((count) => count > 0)).toBe(true)
   })
 })
 
@@ -298,7 +341,7 @@ describe('TestimonialsSection — ratings are never invented', () => {
   it('renders no stars when the data carries no rating', () => {
     const { container } = render(
       <MemoryRouter>
-        <TestimonialCard testimonial={{ ...REAL, rating: undefined }} />
+        <TestimonialCard testimonial={{ ...CARD, rating: undefined }} />
       </MemoryRouter>,
     )
 
@@ -310,11 +353,54 @@ describe('TestimonialsSection — ratings are never invented', () => {
   it('shows the rating the data actually contains', () => {
     const { container } = render(
       <MemoryRouter>
-        <TestimonialCard testimonial={{ ...REAL, rating: 3 }} />
+        <TestimonialCard testimonial={{ ...CARD, rating: 3 }} />
       </MemoryRouter>,
     )
 
     expect(container.textContent).toContain('3 out of 5')
+  })
+
+  it('shows a fractional rating to its own precision rather than rounding it', () => {
+    // 4.8 is not five stars. Rounding up prints a score nobody gave, and the
+    // filled width of the overlay is what makes the two distinguishable.
+    for (const rating of [4.8, 4.9]) {
+      const { container } = render(
+        <MemoryRouter>
+          <TestimonialCard testimonial={{ ...CARD, rating }} />
+        </MemoryRouter>,
+      )
+
+      expect(container.textContent).toContain(`${rating} out of 5`)
+      expect(container.textContent).not.toContain('5 out of 5')
+
+      // The filled overlay is the only element in the card carrying an inline
+      // style, and it clips one star rather than the whole row, so its width is
+      // the fraction of that star which is filled — not the fraction of the row.
+      const overlay = container.querySelector<HTMLElement>('[style*="width"]')
+      expect(overlay).not.toBeNull()
+      expect(overlay?.style.width).toBe(`${(rating % 1) * 100}%`)
+    }
+  })
+
+  it('clips nothing at a whole rating, so no sliver of the next star fills', () => {
+    // A percentage overlay across the full row is wrong by up to one gap: at a
+    // rating of 1 it overfills into the second star. Only a fractional star is
+    // clipped, so a whole rating must produce no clip element at all.
+    for (const rating of [1, 3, 5]) {
+      const { container } = render(
+        <MemoryRouter>
+          <TestimonialCard testimonial={{ ...CARD, rating }} />
+        </MemoryRouter>,
+      )
+
+      expect(container.querySelector('[style*="width"]')).toBeNull()
+    }
+  })
+
+  it('bundles at least one fractional rating, so the partial-star path is real', () => {
+    const fractional = TESTIMONIALS.filter((t) => t.rating !== undefined && t.rating % 1 !== 0)
+
+    expect(fractional.length).toBeGreaterThan(0)
   })
 
   it('prints no aggregate score, review count or total anywhere in the section', () => {
@@ -340,34 +426,26 @@ describe('TestimonialsSection — ratings are never invented', () => {
     }
   })
 
-  it('states the one trust claim the platform can actually make', () => {
+  it('leaves the review claim to TrustSection', () => {
     renderSection()
 
-    expect(
-      screen.getByText(/Every tutor profile is reviewed before it appears publicly/i),
-    ).toBeInTheDocument()
+    // TrustSection says this once, with the three other claims the platform
+    // can defend around it. Repeating it here gave the weaker, isolated version
+    // a second chance to be read on its own.
+    expect(screen.queryByText(/Every tutor profile is reviewed before it appears publicly/i)).toBeNull()
   })
 })
 
 // ---------------------------------------------------------------------------
-// The call to action. Requirement 15.1 — links must point at real routes.
+// The section ends on the stream: no local call to action.
 // ---------------------------------------------------------------------------
 
-describe('TestimonialsSection — call to action', () => {
-  it('closes with the two doors, using existing routes', () => {
-    renderSection()
+describe('TestimonialsSection — no local call to action', () => {
+  it('closes on the stream, leaving the doors to CTASection', () => {
+    const { container } = renderSection()
 
-    expect(screen.getByRole('heading', { level: 3 }).textContent).toBe(
-      'Ready to start learning?',
-    )
-    expect(screen.getByRole('link', { name: /Find a Tutor/i })).toHaveAttribute(
-      'href',
-      '/tutors',
-    )
-    expect(screen.getByRole('link', { name: /Become a Tutor/i })).toHaveAttribute(
-      'href',
-      '/become-a-tutor',
-    )
+    expect(screen.queryByRole('heading', { name: /Ready to start learning/i })).toBeNull()
+    expect(container.querySelectorAll('a[href]')).toHaveLength(0)
   })
 })
 
@@ -397,7 +475,6 @@ describe('toTestimonial — the future API payload', () => {
       avatar: '/api/uploads/abc.png',
       rating: 5,
       isVerified: true,
-      isDemo: false,
     })
   })
 
@@ -409,26 +486,31 @@ describe('toTestimonial — the future API payload', () => {
 
   it('refuses an out-of-range rating instead of clamping it into a score', () => {
     // Clamping 9.4 would print four stars nobody gave.
-    for (const rating of [0, 6, 9.4, -1, '5', null, Number.NaN]) {
+    for (const rating of [0, 6, 9.4, -1, '5', null, Number.NaN, Number.POSITIVE_INFINITY]) {
       expect(toTestimonial({ id: 'a', name: 'B', quote: 'c', subject: 'd', rating })?.rating)
         .toBeUndefined()
     }
   })
 
-  it('never lets a server response smuggle demo content in', () => {
-    const result = toTestimonial({
-      id: 'a',
-      name: 'B',
-      quote: 'c',
-      subject: 'd',
-      isDemo: true,
-    })
+  it('keeps a fractional rating to one decimal rather than rounding it to a star', () => {
+    expect(toTestimonial({ id: 'a', name: 'B', quote: 'c', subject: 'd', rating: 4.8 })?.rating)
+      .toBe(4.8)
+    // Guards the float that would otherwise print as 4.799999999999999 in the
+    // "out of 5" label.
+    expect(toTestimonial({ id: 'a', name: 'B', quote: 'c', subject: 'd', rating: 4.79999 })?.rating)
+      .toBe(4.8)
+  })
 
-    expect(result?.isDemo).toBe(false)
+  it('treats anything but a literal true as unverified', () => {
+    for (const isVerified of ['true', 1, 'yes']) {
+      expect(
+        toTestimonial({ id: 'a', name: 'B', quote: 'c', subject: 'd', isVerified })?.isVerified,
+      ).toBe(false)
+    }
   })
 
   it('lets API data render through the section with no other change', () => {
-    renderSection([toTestimonial({ ...REAL, isVerified: true, rating: 5 }) as Testimonial])
+    renderSection([toTestimonial({ ...CARD, isVerified: true, rating: 5 }) as Testimonial])
 
     expect(screen.getByRole('heading', { level: 2 }).textContent).toBe(
       'Real learning. Real progress.',

@@ -291,6 +291,66 @@ describe('pagination (Requirement 8.5)', () => {
 })
 
 // ---------------------------------------------------------------------------
+// Request a tutor escape hatch
+// ---------------------------------------------------------------------------
+
+describe('request a tutor panel', () => {
+  it('is shown when tutors are returned, so a parent with no suitable match can still ask', async () => {
+    stubApi([makeTutor()])
+    renderPage()
+
+    expect(
+      await screen.findByRole('heading', { name: /can't find the right tutor/i }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('link', { name: /post a tutor request/i }),
+    ).toBeInTheDocument()
+  })
+
+  it('is shown when the API fails, not only when the list is empty', async () => {
+    fetchMock.mockImplementation((input: string) => {
+      const url = new URL(input, 'http://localhost')
+      if (url.pathname === '/api/auth/me') {
+        return Promise.resolve(new Response(JSON.stringify({}), { status: 401 }))
+      }
+      if (url.pathname === '/api/auth/providers') {
+        return Promise.resolve(ok({ providers: [] }))
+      }
+      return Promise.resolve(jsonResponse({ success: false, error: { code: 'SERVER_ERROR' } }, 500))
+    })
+    renderPage()
+
+    expect(
+      await screen.findByRole('link', { name: /post a tutor request/i }),
+    ).toBeInTheDocument()
+  })
+
+  it('links to a bare request form when no filters are active', async () => {
+    stubApi([makeTutor()])
+    renderPage()
+
+    await screen.findByRole('link', { name: /post a tutor request/i })
+    expect(screen.getByRole('link', { name: /post a tutor request/i })).toHaveAttribute(
+      'href',
+      '/request-tutor',
+    )
+  })
+
+  it('carries the active filters into the request form', async () => {
+    stubApi([])
+    renderPage('/tutors?subject=physics&level=University&mode=ONLINE')
+
+    const link = await screen.findByRole('link', { name: /post a tutor request/i })
+    const href = new URL(link.getAttribute('href') ?? '', 'http://localhost')
+
+    expect(href.pathname).toBe('/request-tutor')
+    expect(href.searchParams.get('subject')).toBe('Physics')
+    expect(href.searchParams.get('level')).toBe('University')
+    expect(href.searchParams.get('mode')).toBe('Online')
+  })
+})
+
+// ---------------------------------------------------------------------------
 // Deep-linking (Requirement 8.1)
 // ---------------------------------------------------------------------------
 
