@@ -14,6 +14,16 @@ export interface FieldProps {
   required?: boolean
   hint?: string
   error?: string
+  /**
+   * Set where the surrounding text already says the whole group is optional —
+   * a step description, or a fieldset legend.
+   *
+   * Not cosmetic. The marker sits inside the `<label>`, so it becomes part of the
+   * control's accessible name: a screen reader otherwise announces "From
+   * Optional" for a field whose group is already marked optional, and any code
+   * that looks the control up by name has to know about it.
+   */
+  hideOptionalMarker?: boolean
   /** Renders the control with the accessibility wiring Field computed. */
   children: (props: FieldRenderProps) => ReactNode
 }
@@ -24,7 +34,15 @@ export interface FieldProps {
  * The control is supplied through a render prop so the generated ids and ARIA
  * attributes land on the real element without cloning.
  */
-export function Field({ id, label, required = false, hint, error, children }: FieldProps) {
+export function Field({
+  id,
+  label,
+  required = false,
+  hint,
+  error,
+  hideOptionalMarker = false,
+  children,
+}: FieldProps) {
   const hintId = hint ? `${id}-hint` : undefined
   const errorId = error ? `${id}-error` : undefined
   const describedBy = [hintId, errorId].filter(Boolean).join(' ') || undefined
@@ -34,7 +52,7 @@ export function Field({ id, label, required = false, hint, error, children }: Fi
       <label htmlFor={id} className="text-sm font-medium text-ink-800">
         {label}
         {required ? <RequiredMark /> : null}
-        {!required ? (
+        {!required && !hideOptionalMarker ? (
           <span className="ml-2 text-xs font-normal text-ink-500">Optional</span>
         ) : null}
       </label>

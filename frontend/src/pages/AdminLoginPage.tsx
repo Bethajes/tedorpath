@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
 
+import { Logo } from '@/components/brand/Logo'
 import { fetchAdminStats } from '@/features/adminRequests/adminRequests.api'
 import { setAdminToken } from '@/features/adminRequests/adminSession'
 import { Button, Field, Input } from '@/components/ui'
@@ -43,23 +44,26 @@ export function AdminLoginPage() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-slate-50 px-4">
-      <div className="w-full max-w-md rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-        <p className="text-lg font-bold text-slate-900">Tedor Tutors</p>
-        <p className="text-sm font-medium text-brand-700">Admin</p>
+    <div className="flex min-h-screen items-center justify-center bg-ink-50 px-4 py-10">
+      <div className="w-full max-w-md rounded-2xl border border-ink-200 bg-white p-7 shadow-sm">
+        <Logo size="md" />
 
-        <h1 className="mt-6 text-xl font-semibold text-slate-900">Staff access</h1>
-        <p className="mt-2 text-sm text-slate-600">
-          Enter the admin access token to manage tutor requests.
+        <h1 className="mt-7 text-xl font-semibold tracking-tight text-ink-900">Staff access</h1>
+        <p className="mt-2 text-sm text-ink-600">
+          Enter the admin access token to manage tutor requests, tutor applications and the homepage
+          figures.
         </p>
 
         {error ? (
-          <p role="alert" className="mt-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">
+          <p
+            role="alert"
+            className="mt-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800"
+          >
             {error}
           </p>
         ) : null}
 
-        <form onSubmit={handleSubmit} noValidate className="mt-4">
+        <form onSubmit={handleSubmit} noValidate className="mt-5">
           <Field id="adminToken" label="Admin access token" error={undefined}>
             {(field) => (
               <Input

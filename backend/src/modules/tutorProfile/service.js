@@ -1,5 +1,142 @@
 import { prisma } from '../../lib/prisma.js'
+import { listMarkets } from '../tutors/service.js'
 import { validateProfileCompleteness } from './validation.js'
+
+/**
+ * A rate as the number the browser works with.
+ *
+ * Prisma returns a Decimal, which serialises as a string. Left alone, the
+ * profile API would send `"900.00"` where every client expects a number, and
+ * `900.00` in a price field is indistinguishable from an identifier to anything
+ * doing arithmetic on it. Null passes through: "no rate in this market" is a real
+ * answer, not a zero.
+ */
+function serialiseRate(rate) {
+  if (rate === null || rate === undefined) return null
+  return parseFloat(rate.toString())
+}
+
+
+/**
+ * The submitted rates as a market-code-to-amount map.
+ *
+ * TWO SHAPES, ONE PLACE
+ *
+ * `rates` is the current contract: a map, so a new market is a row in the
+ * `markets` table rather than a new field in this file, this validation module and
+ * the wizard. `hourlyRateEtb` / `hourlyRateUsd` are what this API said before
+ * markets were data, and they are still accepted so a bundle already in a tutor's
+ * browser cache keeps working.
+ *
+ * Both land in the same map here, at the boundary, so no other part of the backend
+ * ever has to know the older shape existed.
+ */
+function submittedRates(data) {
+  const rates = { ...(data.rates ?? {}) }
+
+  for (const [code, value] of Object.entries({
+    ETB: data.hourlyRateEtb,
+    USD: data.hourlyRateUsd,
+  })) {
+    // The named field wins when both are present: it is the narrower, older
+    // contract, and a client sending it means "this is my price in that market".
+    if (value !== undefined) rates[code] = value
+  }
+
+  return rates
+}
+
+/**
+ * Turns a submitted rate map into rate rows.
+ *
+ * A market priced as `null` or omitted writes no row. That is not the same as
+ * writing a zero: the tutor has declined that market, so the row is deleted and
+ * the directory reports no price for it there rather than advertising a free
+ * lesson. Deleting rather than blanking is what makes that true — a leftover row
+ * holding null would be indistinguishable from a deleted one only by accident.
+ */
+async function rateRowsFrom(data, tutorProfileId) {
+  const submitted = submittedRates(data)
+
+  if (Object.keys(submitted).length === 0) return null
+
+  // Checked against the table rather than a list in this file, so a market the
+  // platform does not sell in is reported instead of silently written as a rate
+  // nothing will ever display.
+  const offered = new Set((await listMarkets()).map((market) => market.code))
+  const unknown = Object.keys(submitted).filter((code) => !offered.has(code))
+
+  if (unknown.length > 0) {
+    const error = new Error(`Unsupported market: ${unknown.join(', ')}`)
+    error.code = 'UNSUPPORTED_MARKET'
+    error.fields = unknown.map((code) => ({
+      field: `rates.${code}`,
+      message: `We do not offer prices in ${code}.`,
+    }))
+    throw error
+  }
+
+  return Object.entries(submitted)
+    .filter(([, amount]) => amount !== null && amount !== undefined)
+    .map(([marketCode, amount]) => ({ marketCode, amount, tutorProfileId }))
+}
+
+/**
+ * Replaces a profile's rates in one step.
+ *
+ * Deleting every row first and writing the priced ones back means the stored set is
+ * always exactly what the tutor just submitted — no market left behind from a
+ * previous draft, none added from a form that no longer shows it. It is not the
+ * minimal diff, but "replace what the tutor said" is the only semantics that
+ * cannot drift, and these rows are two per profile.
+ *
+ * Skipped entirely when the request says nothing about rates, so a PATCH of
+ * something unrelated cannot wipe a tutor's prices by omitting a field.
+ */
+async function replaceRates(profileId, data, tx = prisma) {
+  const rows = await rateRowsFrom(data, profileId)
+  if (rows === null) return
+
+  await tx.tutorProfileRate.deleteMany({ where: { tutorProfileId: profileId } })
+
+  if (rows.length > 0) {
+    await tx.tutorProfileRate.createMany({ data: rows })
+  }
+}
+
+/**
+ * The rates on a profile, as the map the owner and the wizard read.
+ *
+ * Always an object, never undefined, so a caller can render "you have not set a
+ * price yet" without first checking whether the key exists.
+ */
+function ratesMap(rates) {
+  return Object.fromEntries(
+    rates.map((rate) => [rate.marketCode, serialiseRate(rate.amount)]),
+  )
+}
+
+/**
+ * The rate fields on a profile response.
+ *
+ * `rates` is the current shape and the only one the platform builds against.
+ * `hourlyRateEtb` and `hourlyRateUsd` are the contract this API had before
+ * markets were data; they are derived from the same rows, so an old client and a
+ * new one can never be told different prices for the same tutor.
+ *
+ * The tutor's own profile carries every market, unlike the public listing: an
+ * owner editing prices needs to see the ones they set, and this response goes to
+ * nobody else.
+ */
+function rateFields(rates) {
+  const map = ratesMap(rates)
+
+  return {
+    rates: map,
+    hourlyRateEtb: map.ETB ?? null,
+    hourlyRateUsd: map.USD ?? null,
+  }
+}
 
 /**
  * TutorProfile service layer.
@@ -48,7 +185,6 @@ export async function createTutorProfile(userId, data) {
       studentLevels: data.studentLevels || [],
       languages: data.languages || ['English'],
       availability: data.availability,
-      hourlyRate: data.hourlyRate,
       experience: data.experience,
       education: data.education,
       // Always start as DRAFT per requirements 2.3, 2.4, 6.1
@@ -69,15 +205,36 @@ export async function createTutorProfile(userId, data) {
       }
     }
 
-    const profile = await prisma.tutorProfile.create({
-      data: createData,
-      include: {
-        subjects: {
-          include: {
-            subject: true,
+    /*
+     * One transaction, because a profile and its prices are one thing: a profile
+     * created with its rates rejected would sit in the directory with no price at
+     * all, and the tutor would have to notice and resubmit to find out.
+     *
+     * The rates are validated before the profile row is written, so an unsupported
+     * market code fails with a field error naming the market rather than a database
+     * constraint violation naming a table.
+     */
+    const profile = await prisma.$transaction(async (tx) => {
+      const created = await tx.tutorProfile.create({
+        data: createData,
+        include: {
+          subjects: {
+            include: {
+              subject: true,
+            },
           },
         },
-      },
+      })
+
+      await replaceRates(created.id, data, tx)
+
+      return tx.tutorProfile.findUniqueOrThrow({
+        where: { id: created.id },
+        include: {
+          subjects: { include: { subject: true } },
+          rates: true,
+        },
+      })
     })
 
     return {
@@ -93,7 +250,7 @@ export async function createTutorProfile(userId, data) {
         studentLevels: profile.studentLevels,
         languages: profile.languages,
         availability: profile.availability,
-        hourlyRate: profile.hourlyRate,
+        ...rateFields(profile.rates),
         experience: profile.experience,
         education: profile.education,
         profileStatus: profile.profileStatus,
@@ -104,6 +261,18 @@ export async function createTutorProfile(userId, data) {
       },
     }
   } catch (error) {
+    // A market the platform does not sell in is the tutor's mistake, not ours:
+    // reported as a field error on the offending market so the form can point
+    // at it, instead of a 500 that says nothing about which input was wrong.
+    if (error.code === 'UNSUPPORTED_MARKET') {
+      return {
+        success: false,
+        code: 'VALIDATION_ERROR',
+        message: 'Please check the rate fields.',
+        fields: error.fields,
+      }
+    }
+
     console.error('Error creating tutor profile:', error)
     return {
       success: false,
@@ -148,6 +317,7 @@ export async function updateTutorProfile(userId, data) {
             subject: true,
           },
         },
+        rates: true,
       },
     })
 
@@ -171,7 +341,6 @@ export async function updateTutorProfile(userId, data) {
       studentLevels: data.studentLevels,
       languages: data.languages,
       availability: data.availability,
-      hourlyRate: data.hourlyRate,
       experience: data.experience,
       education: data.education,
     }
@@ -200,16 +369,24 @@ export async function updateTutorProfile(userId, data) {
       }
     }
 
-    const updatedProfile = await prisma.tutorProfile.update({
-      where: { userId },
-      data: updateData,
-      include: {
-        subjects: {
-          include: {
-            subject: true,
-          },
+    const updatedProfile = await prisma.$transaction(async (tx) => {
+      const updated = await tx.tutorProfile.update({
+        where: { userId },
+        data: updateData,
+      })
+
+      // Runs before the response is read, and inside the transaction, so a
+      // rejected market code rolls the whole update back rather than leaving
+      // the tutor's other edits saved and their price change rejected.
+      await replaceRates(updated.id, data, tx)
+
+      return tx.tutorProfile.findUniqueOrThrow({
+        where: { id: updated.id },
+        include: {
+          subjects: { include: { subject: true } },
+          rates: true,
         },
-      },
+      })
     })
 
     return {
@@ -225,7 +402,7 @@ export async function updateTutorProfile(userId, data) {
         studentLevels: updatedProfile.studentLevels,
         languages: updatedProfile.languages,
         availability: updatedProfile.availability,
-        hourlyRate: updatedProfile.hourlyRate,
+        ...rateFields(updatedProfile.rates),
         experience: updatedProfile.experience,
         education: updatedProfile.education,
         profileStatus: updatedProfile.profileStatus,
@@ -236,6 +413,18 @@ export async function updateTutorProfile(userId, data) {
       },
     }
   } catch (error) {
+    // A market the platform does not sell in is the tutor's mistake, not ours:
+    // reported as a field error on the offending market so the form can point
+    // at it, instead of a 500 that says nothing about which input was wrong.
+    if (error.code === 'UNSUPPORTED_MARKET') {
+      return {
+        success: false,
+        code: 'VALIDATION_ERROR',
+        message: 'Please check the rate fields.',
+        fields: error.fields,
+      }
+    }
+
     console.error('Error updating tutor profile:', error)
     return {
       success: false,
@@ -264,6 +453,7 @@ export async function getMyTutorProfile(userId) {
             subject: true,
           },
         },
+        rates: true,
       },
     })
 
@@ -288,7 +478,7 @@ export async function getMyTutorProfile(userId) {
         studentLevels: profile.studentLevels,
         languages: profile.languages,
         availability: profile.availability,
-        hourlyRate: profile.hourlyRate,
+        ...rateFields(profile.rates),
         experience: profile.experience,
         education: profile.education,
         profileStatus: profile.profileStatus,
@@ -368,6 +558,7 @@ export async function submitTutorProfile(userId) {
             subject: true,
           },
         },
+        rates: true,
       },
     })
 
@@ -410,7 +601,7 @@ export async function submitTutorProfile(userId) {
       headline: profile.headline,
       bio: profile.bio,
       teachingMode: profile.teachingMode,
-      hourlyRate: profile.hourlyRate,
+      rates: ratesMap(profile.rates),
       subjects: profile.subjects,
       studentLevels: profile.studentLevels,
     })
@@ -460,6 +651,18 @@ export async function submitTutorProfile(userId) {
       },
     }
   } catch (error) {
+    // A market the platform does not sell in is the tutor's mistake, not ours:
+    // reported as a field error on the offending market so the form can point
+    // at it, instead of a 500 that says nothing about which input was wrong.
+    if (error.code === 'UNSUPPORTED_MARKET') {
+      return {
+        success: false,
+        code: 'VALIDATION_ERROR',
+        message: 'Please check the rate fields.',
+        fields: error.fields,
+      }
+    }
+
     console.error('Error submitting tutor profile:', error)
     return {
       success: false,

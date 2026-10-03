@@ -40,6 +40,7 @@ function makeTutor(overrides: Partial<TutorCardDTO> = {}): TutorCardDTO {
     teachingMode: 'ONLINE',
     location: 'Addis Ababa',
     hourlyRate: 50,
+    hourlyRateCurrency: 'ETB',
     studentLevels: ['High School'],
     languages: ['English', 'Amharic'],
     subjects: [{ id: 'sub-1', name: 'Mathematics', slug: 'mathematics' }],

@@ -43,6 +43,7 @@ const TUTOR: TutorDetailDTO = {
   teachingMode: 'BOTH',
   location: 'Addis Ababa',
   hourlyRate: 30,
+  hourlyRateCurrency: 'ETB',
   studentLevels: ['High School', 'University'],
   languages: ['English', 'Amharic'],
   availability: 'Weekday evenings',
@@ -80,6 +81,8 @@ type Reply =
 interface Stub {
   replies: Reply[]
   calls: string[]
+  /** Full paths including the query string, for assertions about parameters. */
+  queries: string[]
   mock: ReturnType<typeof vi.fn>
 }
 
@@ -97,14 +100,29 @@ function tutorReply(tutor: TutorDetailDTO | null): Reply {
 }
 
 beforeEach(() => {
-  const state: Stub = { replies: [], calls: [], mock: vi.fn() }
+  const state: Stub = { replies: [], calls: [], queries: [], mock: vi.fn() }
 
   state.mock.mockImplementation(async (input: RequestInfo | URL) => {
     const url = new URL(String(input), 'http://localhost')
     state.calls.push(url.pathname)
+    state.queries.push(`${url.pathname}${url.search}`)
 
-    // Only the profile endpoint is stubbed. Anything else is a test bug, and
-    // naming it beats a silent default that would hide a wrong request.
+    /*
+     * Two endpoints are stubbed: the profile itself, and the market lookup that
+     * decides which of the tutor's two prices is shown. Everything else is a test
+     * bug, and naming it beats a silent default that would hide a wrong request.
+     *
+     * The market resolves immediately so the profile render is not racing it —
+     * every assertion below is about the page, and the market's own behaviour is
+     * covered by market.test.ts.
+     */
+    if (url.pathname === '/api/onboarding/market') {
+      return Response.json({
+        success: true,
+        data: { market: 'ETB', country: 'ET', detected: true },
+      })
+    }
+
     if (!url.pathname.startsWith('/api/tutors/')) {
       throw new Error(`unexpected request: ${url.pathname}`)
     }
@@ -295,6 +313,7 @@ const tutorProfileArbitrary: fc.Arbitrary<TutorDetailDTO> = fc.record({
   teachingMode: fc.constantFrom('ONLINE', 'IN_PERSON', 'BOTH'),
   location: fc.option(words(1, 2), { nil: null }),
   hourlyRate: fc.option(fc.integer({ min: 0, max: 500 }).map((value) => value / 100), { nil: null }),
+  hourlyRateCurrency: fc.constant('ETB' as const),
   studentLevels: uniqueWords(1, 3),
   languages: uniqueWords(1, 3),
   availability: fc.option(words(2, 5), { nil: null }),
@@ -419,7 +438,7 @@ describe('profile content (Requirement 10.1)', () => {
     const view = renderView(TUTOR)
 
     expect(view.getByText('Addis Ababa')).toBeInTheDocument()
-    expect(view.getByText('30 per hour')).toBeInTheDocument()
+    expect(view.getByText('30 ETB per hour')).toBeInTheDocument()
     expect(view.getByRole('list', { name: 'Languages' })).toHaveTextContent('Amharic')
     expect(view.getByText('Weekday evenings')).toBeInTheDocument()
     expect(view.getByText('MSc Mathematics')).toBeInTheDocument()
@@ -433,10 +452,22 @@ describe('profile content (Requirement 10.1)', () => {
     expect(view.queryByText('Location')).toBeNull()
   })
 
-  it('shows a zero rate rather than treating it as absent', () => {
-    // 0 is a real price. A truthiness check would hide the one tutor who is
-    // free, which is exactly the person a visitor is looking for.
-    expect(renderView({ ...TUTOR, hourlyRate: 0 }).getByText('0 per hour')).toBeInTheDocument()
+  it('shows one price, labelled with the market it is in', () => {
+    // The profile used to carry a second row, "also teaches for international
+    // students", with the tutor's other price in it. On a detail page that reads
+    // as informative, and it is — but it invites the question "which of these two do
+    // I pay?", which a learner cannot answer and should not have to.
+    const view = renderView(TUTOR)
+
+    expect(view.getByText('30 ETB per hour')).toBeInTheDocument()
+    expect(view.getAllByText(/per hour/)).toHaveLength(1)
+  })
+
+  it('renders a zero rate rather than hiding it', () => {
+    // The API rejects a zero rate, so this cannot come from the server. Kept
+    // because a truthiness check on a price is the kind of thing that looks like
+    // cleanup and quietly starts hiding numbers.
+    expect(renderView({ ...TUTOR, hourlyRate: 0 }).getByText('0 ETB per hour')).toBeInTheDocument()
   })
 
   it('says so plainly when the tutor left a section empty, instead of hiding it', () => {
@@ -463,7 +494,14 @@ describe('profile content (Requirement 10.1)', () => {
     replyWith(tutorReply(TUTOR))
     await renderLoadedPage()
 
-    expect(stub.calls).toEqual([`/api/tutors/${TUTOR_ID}`])
+    /*
+      Exactly one profile request, for this tutor, and no market on it. The server
+      resolves the market from who is asking, so the page asks for the tutor and
+      nothing else.
+    */
+    expect(stub.queries.filter((path) => path.startsWith('/api/tutors/'))).toEqual([
+      `/api/tutors/${TUTOR_ID}`,
+    ])
   })
 })
 
@@ -520,7 +558,10 @@ describe('missing or unapproved tutor (Requirement 10.2)', () => {
     await userEvent.click(screen.getByRole('button', { name: /try again/i }))
 
     expect(await screen.findByRole('heading', { level: 1 })).toHaveTextContent('Ada Lovelace')
-    expect(stub.calls).toHaveLength(2)
+
+    // Two attempts at the profile. The registry is not re-fetched on a retry: it did
+    // not fail, and it is not what decided the price.
+    expect(stub.calls.filter((path) => path.startsWith('/api/tutors/'))).toHaveLength(2)
   })
 
   it('shows a loading state while the request is in flight', () => {

@@ -46,10 +46,10 @@ import { formatDate } from '@/lib/formatDate'
 // ---------------------------------------------------------------------------
 
 const STATUS_BADGE_CLASSES: Record<ProfileStatus, string> = {
-  DRAFT: 'bg-slate-100 text-slate-700',
+  DRAFT: 'bg-ink-100 text-ink-700',
   PENDING_REVIEW: 'bg-amber-100 text-amber-800',
   APPROVED: 'bg-emerald-100 text-emerald-800',
-  SUSPENDED: 'bg-slate-200 text-slate-800',
+  SUSPENDED: 'bg-ink-200 text-ink-800',
   REJECTED: 'bg-red-100 text-red-800',
   NEEDS_INFORMATION: 'bg-orange-100 text-orange-800',
 }
@@ -86,10 +86,10 @@ function Section({
         'rounded-xl border p-5 shadow-sm',
         tone === 'internal'
           ? 'border-amber-200 bg-amber-50'
-          : 'border-slate-200 bg-white',
+          : 'border-ink-200 bg-white',
       )}
     >
-      <h2 className="mb-4 text-base font-semibold text-slate-900">{title}</h2>
+      <h2 className="mb-4 text-base font-semibold text-ink-900">{title}</h2>
       {children}
     </section>
   )
@@ -97,9 +97,9 @@ function Section({
 
 function FieldRow({ label, value }: { label: string; value: React.ReactNode }) {
   return (
-    <div className="flex flex-col gap-0.5 border-b border-slate-100 py-2 last:border-0 sm:flex-row sm:gap-4">
-      <dt className="w-full shrink-0 text-xs font-medium text-slate-500 sm:w-44">{label}</dt>
-      <dd className="text-sm text-slate-800">{value || '—'}</dd>
+    <div className="flex flex-col gap-0.5 border-b border-ink-100 py-2 last:border-0 sm:flex-row sm:gap-4">
+      <dt className="w-full shrink-0 text-xs font-medium text-ink-500 sm:w-44">{label}</dt>
+      <dd className="text-sm text-ink-800">{value || '—'}</dd>
     </div>
   )
 }
@@ -133,6 +133,25 @@ function CopyButton({ value }: { value: string }) {
 // ---------------------------------------------------------------------------
 // AdminTutorReviewPage
 // ---------------------------------------------------------------------------
+
+/**
+ * A moderator's view of the two rates.
+ *
+ * Both, always. A moderator deciding whether to approve a profile needs to know
+ * that an international rate exists at all, not only the one their screen happens
+ * to prefer — and the two are never compared against each other, so there is
+ * nothing to sum or average here.
+ *
+ * "Not offered" rather than an em dash, because an em dash reads as a rendering
+ * gap and this is a decision the tutor made.
+ */
+function formatAdminRates(profile: { hourlyRateEtb: number | null; hourlyRateUsd: number | null }): string {
+  const parts: string[] = []
+  if (profile.hourlyRateEtb != null) parts.push(`${profile.hourlyRateEtb} ETB/hr`)
+  if (profile.hourlyRateUsd != null) parts.push(`${profile.hourlyRateUsd} USD/hr`)
+
+  return parts.length > 0 ? parts.join(' · ') : 'No rate offered'
+}
 
 export function AdminTutorReviewPage() {
   const { id = '' } = useParams()
@@ -170,6 +189,11 @@ export function AdminTutorReviewPage() {
   const [rejectMessage, setRejectMessage] = useState('')
   const [rejecting, setRejecting] = useState(false)
   const [rejectError, setRejectError] = useState<string | null>(null)
+
+  // Suspend modal
+  const [suspendOpen, setSuspendOpen] = useState(false)
+  const [suspending, setSuspending] = useState(false)
+  const [suspendError, setSuspendError] = useState<string | null>(null)
 
   const active = useRef(true)
   useEffect(() => {
@@ -298,6 +322,33 @@ export function AdminTutorReviewPage() {
     }
   }
 
+  // ── Suspend ───────────────────────────────────────────────────────────────
+  /**
+   * Takes an approved tutor out of the public directory without ending the
+   * relationship.
+   *
+   * Distinct from rejection on purpose: a suspended tutor is somebody who was
+   * approved and may be restored, and the API has no restore action — so this is
+   * a one-way door in the UI, which is why it gets a confirmation that says so.
+   * No reason field is required because the API does not accept one, and asking
+   * for a reason the server would discard would be worse than not asking.
+   */
+  async function handleSuspend() {
+    setSuspending(true)
+    setSuspendError(null)
+    try {
+      const updated = await updateTutorStatus(id, { status: 'SUSPENDED' })
+      if (!active.current) return
+      setProfile(updated)
+      setSuspendOpen(false)
+    } catch {
+      if (!active.current) return
+      setSuspendError('Unable to suspend this tutor. Please try again.')
+    } finally {
+      if (active.current) setSuspending(false)
+    }
+  }
+
   // ── Checklist helper ──────────────────────────────────────────────────────
   function toggleChecklistItem(key: keyof VerificationChecklist) {
     setChecklist((prev) => ({ ...prev, [key]: !prev[key] }))
@@ -311,7 +362,7 @@ export function AdminTutorReviewPage() {
       </div>
 
       {loading ? (
-        <p role="status" className="rounded-xl border border-slate-200 bg-white p-6 text-sm text-slate-600 shadow-sm">
+        <p role="status" className="rounded-xl border border-ink-200 bg-white p-6 text-sm text-ink-600 shadow-sm">
           Loading tutor profile…
         </p>
       ) : null}
@@ -374,12 +425,12 @@ export function AdminTutorReviewPage() {
                       <img
                         src={profile.profilePhotoUrl}
                         alt={`${profile.displayName}'s profile photo`}
-                        className="h-24 w-24 rounded-full object-cover ring-2 ring-slate-200"
+                        className="h-24 w-24 rounded-full object-cover ring-2 ring-ink-200"
                       />
                     ) : (
                       <span
                         aria-hidden="true"
-                        className="flex h-24 w-24 items-center justify-center rounded-full bg-slate-200 text-3xl font-bold text-slate-500"
+                        className="flex h-24 w-24 items-center justify-center rounded-full bg-ink-200 text-3xl font-bold text-ink-500"
                       >
                         {profile.displayName.trim().charAt(0).toUpperCase() || '?'}
                       </span>
@@ -395,13 +446,13 @@ export function AdminTutorReviewPage() {
                         value={
                           profile.applicationReference ? (
                             <span>
-                              <code className="rounded bg-slate-100 px-1.5 py-0.5 text-sm font-mono">
+                              <code className="rounded bg-ink-100 px-1.5 py-0.5 text-sm font-mono">
                                 {profile.applicationReference}
                               </code>
                               <CopyButton value={profile.applicationReference} />
                             </span>
                           ) : (
-                            <span className="text-slate-400">Not yet submitted</span>
+                            <span className="text-ink-400">Not yet submitted</span>
                           )
                         }
                       />
@@ -451,7 +502,7 @@ export function AdminTutorReviewPage() {
                       profile.studentLevels.length > 0 ? (
                         <div className="flex flex-wrap gap-1.5">
                           {profile.studentLevels.map((level) => (
-                            <span key={level} className="rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-medium text-slate-700">
+                            <span key={level} className="rounded-full bg-ink-100 px-2.5 py-0.5 text-xs font-medium text-ink-700">
                               {level}
                             </span>
                           ))}
@@ -465,7 +516,7 @@ export function AdminTutorReviewPage() {
                   />
                   <FieldRow
                     label="Hourly rate"
-                    value={profile.hourlyRate != null ? `£${profile.hourlyRate}/hr` : null}
+                    value={formatAdminRates(profile)}
                   />
                 </dl>
               </Section>
@@ -477,7 +528,7 @@ export function AdminTutorReviewPage() {
                 </p>
 
                 {profile.profileStatus === 'APPROVED' ? (
-                  <p className="mb-3 text-sm text-slate-600">
+                  <p className="mb-3 text-sm text-ink-600">
                     This profile is approved.{' '}
                     <Link
                       to={`/tutors/${profile.id}`}
@@ -490,44 +541,44 @@ export function AdminTutorReviewPage() {
                   </p>
                 ) : null}
 
-                <div className="rounded-xl border border-slate-200 bg-slate-50 p-5">
+                <div className="rounded-xl border border-ink-200 bg-ink-50 p-5">
                   <div className="flex flex-col gap-4 sm:flex-row sm:items-start">
                     {profile.profilePhotoUrl ? (
                       <img
                         src={profile.profilePhotoUrl}
                         alt={`${profile.displayName}'s profile photo`}
-                        className="h-20 w-20 rounded-full object-cover ring-2 ring-slate-200"
+                        className="h-20 w-20 rounded-full object-cover ring-2 ring-ink-200"
                       />
                     ) : (
                       <span
                         aria-hidden="true"
-                        className="flex h-20 w-20 items-center justify-center rounded-full bg-slate-200 text-2xl font-bold text-slate-500"
+                        className="flex h-20 w-20 items-center justify-center rounded-full bg-ink-200 text-2xl font-bold text-ink-500"
                       >
                         {profile.displayName.trim().charAt(0).toUpperCase() || '?'}
                       </span>
                     )}
                     <div className="min-w-0 flex-1">
-                      <p className="text-lg font-bold text-slate-900">{profile.displayName}</p>
-                      <p className="text-sm text-slate-600">{profile.headline}</p>
+                      <p className="text-lg font-bold text-ink-900">{profile.displayName}</p>
+                      <p className="text-sm text-ink-600">{profile.headline}</p>
                       {profile.location ? (
-                        <p className="mt-1 text-xs text-slate-500">{profile.location}</p>
+                        <p className="mt-1 text-xs text-ink-500">{profile.location}</p>
                       ) : null}
-                      {profile.hourlyRate != null ? (
-                        <p className="mt-1 text-sm font-semibold text-slate-800">£{profile.hourlyRate}/hr</p>
-                      ) : null}
+                      <p className="mt-1 text-sm font-semibold text-ink-800">
+                        {formatAdminRates(profile)}
+                      </p>
                     </div>
                   </div>
 
                   {profile.bio ? (
-                    <div className="mt-4 border-t border-slate-200 pt-4">
-                      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">About</p>
-                      <p className="mt-1 text-sm text-slate-700 line-clamp-4">{profile.bio}</p>
+                    <div className="mt-4 border-t border-ink-200 pt-4">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-ink-500">About</p>
+                      <p className="mt-1 text-sm text-ink-700 line-clamp-4">{profile.bio}</p>
                     </div>
                   ) : null}
 
                   {profile.subjects.length > 0 ? (
-                    <div className="mt-4 border-t border-slate-200 pt-4">
-                      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Subjects</p>
+                    <div className="mt-4 border-t border-ink-200 pt-4">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-ink-500">Subjects</p>
                       <div className="mt-2 flex flex-wrap gap-1.5">
                         {profile.subjects.map((s) => (
                           <span key={s.id} className="rounded-full bg-brand-100 px-2.5 py-0.5 text-xs font-medium text-brand-800">
@@ -548,7 +599,7 @@ export function AdminTutorReviewPage() {
 
                 {/* Verification status */}
                 <div className="mb-4 flex flex-col gap-1.5">
-                  <label htmlFor="verification-status" className="text-sm font-medium text-slate-800">
+                  <label htmlFor="verification-status" className="text-sm font-medium text-ink-800">
                     Verification status
                   </label>
                   <Select
@@ -567,15 +618,15 @@ export function AdminTutorReviewPage() {
 
                 {/* Verification checklist */}
                 <fieldset className="mb-4">
-                  <legend className="mb-2 text-sm font-medium text-slate-800">Document checklist</legend>
+                  <legend className="mb-2 text-sm font-medium text-ink-800">Document checklist</legend>
                   <div className="flex flex-col gap-2">
                     {VERIFICATION_CHECKLIST_FIELDS.map(({ key, label }) => (
-                      <label key={key} className="flex cursor-pointer items-center gap-3 text-sm text-slate-700">
+                      <label key={key} className="flex cursor-pointer items-center gap-3 text-sm text-ink-700">
                         <input
                           type="checkbox"
                           checked={checklist[key]}
                           onChange={() => toggleChecklistItem(key)}
-                          className="h-4 w-4 rounded border-slate-300 accent-brand-600"
+                          className="h-4 w-4 rounded border-ink-300 accent-brand-600"
                         />
                         {label}
                       </label>
@@ -585,9 +636,9 @@ export function AdminTutorReviewPage() {
 
                 {/* Admin notes */}
                 <div className="mb-4 flex flex-col gap-1.5">
-                  <label htmlFor="admin-notes" className="text-sm font-medium text-slate-800">
+                  <label htmlFor="admin-notes" className="text-sm font-medium text-ink-800">
                     Verification notes
-                    <span className="ml-1 text-xs font-normal text-slate-500">(internal, not shown to applicant)</span>
+                    <span className="ml-1 text-xs font-normal text-ink-500">(internal, not shown to applicant)</span>
                   </label>
                   <Textarea
                     id="admin-notes"
@@ -626,8 +677,15 @@ export function AdminTutorReviewPage() {
 
             {/* ── Sticky action panel ─────────────────────────────────────── */}
             <aside className="w-full lg:w-64 lg:shrink-0">
-              <div className="sticky top-6 flex flex-col gap-3 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-                <h2 className="text-sm font-semibold text-slate-900">Moderation</h2>
+              <div className="sticky top-6 flex flex-col gap-3 rounded-xl border border-ink-200 bg-white p-5 shadow-sm">
+                <div>
+                  <h2 className="text-sm font-semibold text-ink-900">Moderation</h2>
+                  <p className="mt-0.5 text-xs text-ink-500">
+                    {profile.profileStatus === 'APPROVED'
+                      ? 'This tutor is live in the public directory.'
+                      : 'This tutor is not visible in the public directory.'}
+                  </p>
+                </div>
 
                 <Button
                   variant="primary"
@@ -666,6 +724,26 @@ export function AdminTutorReviewPage() {
                 >
                   Reject Application
                 </Button>
+
+                {/*
+                  Suspend is offered only to a tutor who is currently approved —
+                  suspending somebody who was never approved changes nothing an
+                  admin can see, and offering it anyway would fill the panel with
+                  controls that do nothing.
+                */}
+                {profile.profileStatus === 'APPROVED' ? (
+                  <Button
+                    variant="outline"
+                    fullWidth
+                    onClick={() => {
+                      setSuspendError(null)
+                      setSuspendOpen(true)
+                    }}
+                    className="border-amber-300 text-amber-800 hover:bg-amber-50"
+                  >
+                    Suspend Tutor
+                  </Button>
+                ) : null}
               </div>
             </aside>
           </div>
@@ -714,7 +792,7 @@ export function AdminTutorReviewPage() {
             }
           >
             <div className="flex flex-col gap-2">
-              <label htmlFor="info-message" className="text-sm font-medium text-slate-800">
+              <label htmlFor="info-message" className="text-sm font-medium text-ink-800">
                 Message to applicant <span aria-hidden="true" className="text-red-500">*</span>
               </label>
               <Textarea
@@ -725,7 +803,7 @@ export function AdminTutorReviewPage() {
                 onChange={(e) => setInfoMessage(e.target.value)}
                 placeholder="Describe what additional information or documents are needed…"
               />
-              <p className="text-xs text-slate-500">{infoMessage.length} / 2000</p>
+              <p className="text-xs text-ink-500">{infoMessage.length} / 2000</p>
               {infoError ? <Alert tone="error">{infoError}</Alert> : null}
             </div>
           </Modal>
@@ -752,7 +830,7 @@ export function AdminTutorReviewPage() {
           >
             <div className="flex flex-col gap-4">
               <div className="flex flex-col gap-1.5">
-                <label htmlFor="reject-reason" className="text-sm font-medium text-slate-800">
+                <label htmlFor="reject-reason" className="text-sm font-medium text-ink-800">
                   Reason <span aria-hidden="true" className="text-red-500">*</span>
                 </label>
                 <Select
@@ -768,9 +846,9 @@ export function AdminTutorReviewPage() {
                 </Select>
               </div>
               <div className="flex flex-col gap-1.5">
-                <label htmlFor="reject-message" className="text-sm font-medium text-slate-800">
+                <label htmlFor="reject-message" className="text-sm font-medium text-ink-800">
                   Additional message{' '}
-                  <span className="text-xs font-normal text-slate-500">(optional)</span>
+                  <span className="text-xs font-normal text-ink-500">(optional)</span>
                 </label>
                 <Textarea
                   id="reject-message"
@@ -780,9 +858,49 @@ export function AdminTutorReviewPage() {
                   onChange={(e) => setRejectMessage(e.target.value)}
                   placeholder="Any additional context for the applicant…"
                 />
-                <p className="text-xs text-slate-500">{rejectMessage.length} / 2000</p>
+                <p className="text-xs text-ink-500">{rejectMessage.length} / 2000</p>
               </div>
               {rejectError ? <Alert tone="error">{rejectError}</Alert> : null}
+            </div>
+          </Modal>
+
+          {/* ── Suspend modal ──────────────────────────────────────────────── */}
+          <Modal
+            open={suspendOpen}
+            title="Suspend this tutor?"
+            onClose={() => { setSuspendOpen(false); setSuspendError(null) }}
+            footer={
+              <>
+                <Button variant="outline" onClick={() => { setSuspendOpen(false); setSuspendError(null) }} disabled={suspending}>
+                  Cancel
+                </Button>
+                <Button
+                  onClick={() => void handleSuspend()}
+                  disabled={suspending}
+                  className="bg-amber-600 hover:bg-amber-700 text-white"
+                >
+                  {suspending ? 'Suspending…' : 'Suspend Tutor'}
+                </Button>
+              </>
+            }
+          >
+            {/*
+              The consequence is stated rather than softened. Suspending removes
+              the profile from the public directory, and there is no restore action
+              anywhere in the admin API — so the admin is told that before the
+              button, not after.
+            */}
+            <div className="flex flex-col gap-3">
+              <p className="text-sm text-ink-700">
+                Suspending removes <span className="font-semibold">{profile.displayName}</span> from
+                the public tutor directory straight away. Anyone already booked with them is not
+                notified automatically.
+              </p>
+              <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+                There is no &ldquo;unsuspend&rdquo; action in this admin area. To bring the profile
+                back you would have to approve it again from the queue.
+              </p>
+              {suspendError ? <Alert tone="error">{suspendError}</Alert> : null}
             </div>
           </Modal>
         </>

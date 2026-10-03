@@ -45,7 +45,18 @@ export interface MyTutorProfile {
   studentLevels: string[]
   languages: string[]
   availability: string | null
-  hourlyRate: number | null
+  /**
+   * The tutor's own rate for each market, keyed by market code.
+   *
+   * A map rather than one field per market so that adding a market is a row in
+   * the backend's `markets` table rather than a change to this file, the API
+   * payload and the form. A market the tutor declined is simply absent.
+   *
+   * No number here is derived from another: Tedor Tutors serves Ethiopian and
+   * international learners separately, and there is no exchange rate anywhere in
+   * this product.
+   */
+  rates: Record<string, number | null>
   experience: string | null
   education: string | null
   profileStatus: TutorProfileStatus
@@ -88,8 +99,15 @@ export interface OnboardingFormData {
   // Step 6 — Education
   education: string
 
-  // Step 7 — Pricing
-  hourlyRate: string
+  /*
+   * Step 7 — Pricing. One rate per market, as strings because this is a form.
+   *
+   * Keyed by market code for the same reason the profile is: the fields on this
+   * step are generated from the market registry, so a market added to the
+   * backend gets an input here without anyone editing this interface. Any market
+   * may be left blank.
+   */
+  rates: Record<string, string>
   languages: string
   availability: string
 }
@@ -105,7 +123,7 @@ export const EMPTY_FORM_DATA: OnboardingFormData = {
   teachingMode: '',
   experience: '',
   education: '',
-  hourlyRate: '',
+  rates: {},
   languages: '',
   availability: '',
 }
@@ -180,7 +198,9 @@ const FIELD_STEP_MAP: Record<string, { label: string; step: OnboardingStepIndex 
 
   education: { label: 'Education', step: 5 },
 
-  hourlyRate: { label: 'Hourly rate', step: 6 },
+  // The rate fields are deliberately absent: their labels come from the market
+  // registry rather than from a fixed record, and a completeness summary cannot
+  // enumerate markets that do not exist yet.
   languages: { label: 'Languages', step: 6 },
   availability: { label: 'Availability', step: 6 },
 }

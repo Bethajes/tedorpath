@@ -6,6 +6,9 @@ import { Card, CardBody, CardHeader, CardTitle } from '@/components/ui/Card'
 import { useAuth } from '@/features/auth/useAuth'
 import { getTutor } from '@/features/tutors/tutors.api'
 import { TEACHING_MODE_LABELS } from '@/features/tutors/tutors.types'
+import {
+  primaryRate,
+} from '@/features/tutors/formatRate'
 import type { TutorDetailDTO } from '@/features/tutors/tutors.types'
 import { ApiError, resolveImageUrl } from '@/lib/api'
 import { cn } from '@/lib/cn'
@@ -257,6 +260,10 @@ function RequestTutorLink({
  * Requirements: 31.1, 31.3
  */
 function ProfileFacts({ tutor }: { tutor: TutorDetailDTO }) {
+  // Derived once so the row below does not repeat the condition, and so the
+  // formatter's "is there a price at all" answer is the single test used for it.
+  const rate = primaryRate(tutor)
+
   return (
     <dl className="mt-4 grid grid-cols-2 gap-x-6 gap-y-3 text-sm sm:max-w-2xl sm:grid-cols-3">
       <div>
@@ -271,17 +278,22 @@ function ProfileFacts({ tutor }: { tutor: TutorDetailDTO }) {
         </div>
       ) : null}
 
-      {tutor.hourlyRate !== null ? (
+      {/*
+        One price, in the visitor's own market.
+
+        This profile used to print the tutor's price for the other market in a
+        second row labelled "also teaches for". On a detail page that reads as
+        more informative, and it is: but it also invites the question "which of
+        these two do I pay?", which a learner cannot answer and should not have
+        to. The market selector above the profile is the answer to "show me the
+        other one", and it changes every price on the page at once.
+      */}
+      {rate ? (
         <div>
-          <dt className="font-medium text-ink-500">Hourly rate</dt>
-          <dd className="text-ink-900">
-            {/*
-              No currency symbol: the API sends a bare number and no currency
-              field, so printing "$" or "ETB" here would be inventing data.
-              A rate of 0 is a real price and is shown like any other.
-            */}
-            {tutor.hourlyRate} per hour
-          </dd>
+          <dt className="font-medium text-ink-500">
+            Hourly rate in {tutor.hourlyRateCurrency}
+          </dt>
+          <dd className="text-ink-900">{rate} per hour</dd>
         </div>
       ) : null}
 
@@ -428,6 +440,30 @@ export function TutorProfileView({ tutor }: { tutor: TutorDetailDTO }) {
 export function TutorProfilePage() {
   const { id = '' } = useParams()
 
+  /*
+   * One fetch, no market parameter, and no waiting for anything first.
+   *
+   * This page used to hold its mount until a market had been resolved, because the
+   * rate the server sends depends on it — so it fetched, got a price, and if the
+   * market then landed differently it fetched again. Two requests for one page
+   * view, and a price on screen that was not the price being displayed.
+   *
+   * None of that is needed now. The server resolves the market from the same
+   * account, cookie and network it resolved the directory's with, and sends one
+   * rate. So the page asks once and renders it, which is also why a card no longer
+   * has to carry `?market=` onward to stop the two pages disagreeing.
+   */
+  return <LoadedTutorProfile id={id} />
+}
+
+/**
+ * The profile itself.
+ *
+ * A separate component purely for its name at the call site above: there is
+ * nothing to wait for any more, and a component called `Loaded` would be
+ * claiming a two-phase render that no longer exists.
+ */
+function LoadedTutorProfile({ id }: { id: string }) {
   const load = useCallback(() => loadTutorProfile(id), [id])
 
   const { data, loading, error, reload } = useAsyncData<TutorDetailDTO | null>(

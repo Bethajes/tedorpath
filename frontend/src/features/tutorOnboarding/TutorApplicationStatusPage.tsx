@@ -217,7 +217,15 @@ function PendingReviewState({ profile }: { profile: MyTutorProfile }) {
         <h2 className="text-lg font-semibold text-ink-900">Send us your documents</h2>
         <p className="mt-2 text-ink-600">
           To finish verifying your profile, please send the following over one of the contact
-          details below:
+          details below
+          {telegramLink() && telegramHandle() ? (
+            <>
+              {' '}
+              &mdash; on Telegram, message{' '}
+              <span className="font-semibold text-ink-900">{telegramHandle()}</span>
+            </>
+          ) : null}
+          :
         </p>
         <ul className="mt-4 space-y-2.5">
           {REQUIRED_DOCUMENTS.map((document) => (
@@ -450,10 +458,17 @@ function ReferenceBlock({ reference }: { reference: string }) {
  * Neither channel is assumed to exist: a deployment that has only one still
  * shows one, and one with neither shows neither rather than a pair of dead
  * links. Requirement 32.3, 32.4
+ *
+ * The Telegram HANDLE is shown, not just the word "Telegram". A tutor who is
+ * about to send an identity document needs to know which account they are about
+ * to open — "Message on Telegram" on its own leaves them hunting for the handle
+ * in the app. The handle used to be screen-reader-only, which meant the one
+ * person who most needed to read it was the one person who could not.
  */
 function ContactActions() {
   const telegram = telegramLink()
   const whatsapp = whatsappLink()
+  const handle = telegramHandle()
 
   if (!telegram && !whatsapp) return null
 
@@ -466,12 +481,15 @@ function ContactActions() {
             href={telegram}
             target="_blank"
             rel="noreferrer noopener"
-            className="inline-flex items-center rounded-lg border border-ink-200 px-4 py-2.5 text-sm font-medium text-ink-800 transition-colors hover:bg-ink-50"
+            className="inline-flex items-center gap-2 rounded-lg border border-ink-200 px-4 py-2.5 text-sm font-medium text-ink-800 transition-colors hover:bg-ink-50"
           >
-            Message on Telegram
-            {/* The handle, so a screen-reader user knows which account they are
-                about to open rather than only that it is Telegram. */}
-            <span className="sr-only"> ({telegramHandle()})</span>
+            <span>Message on Telegram</span>
+            {/* Visible, and copyable: this is the address they have to reach. */}
+            {handle ? (
+              <span className="rounded bg-ink-100 px-1.5 py-0.5 text-xs font-semibold text-ink-600">
+                {handle}
+              </span>
+            ) : null}
           </a>
         ) : null}
         {whatsapp ? (

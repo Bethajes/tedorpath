@@ -81,11 +81,24 @@ model User {
 
   // Always stored normalized (trimmed and lowercased) so uniqueness is
   // case-insensitive. Nothing may write this column without normalizing first.
-  email    String @unique @db.VarChar(320)
-  name     String @db.VarChar(80)
-  image    String? @db.VarChar(2048)
-  phone    String? @unique @db.VarChar(20)
-  role     UserRole @default(CLIENT)
+  email String   @unique @db.VarChar(320)
+  name  String   @db.VarChar(80)
+  image String?  @db.VarChar(2048)
+  phone String?  @unique @db.VarChar(20)
+  role  UserRole @default(CLIENT)
+
+  /// ISO 3166-1 alpha-2 country the user says they are in.
+  ///
+  /// Set at registration and changeable. Used to pick the market their tutor
+  /// prices are shown in before they have told the site anything on a public
+  /// page — the one source of "where is this learner" that is an actual answer
+  /// rather than an inference from their network or their device.
+  ///
+  /// Deliberately a soft string and not a foreign key: a country code from a
+  /// large ISO list is reference data, and refusing a registration because one
+  /// country has not been loaded yet would be a worse failure than storing a code
+  /// we do not recognise.
+  countryCode String? @db.Char(2)
 
   // A timestamp rather than a boolean, so "when was it verified" is auditable.
   // Email verification and phone OTP are not implemented yet, so these stay
@@ -96,10 +109,10 @@ model User {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  accounts       Account[]
-  sessions       Session[]
-  tutorRequests  TutorRequest[]
-  tutorProfile   TutorProfile?
+  accounts      Account[]
+  sessions      Session[]
+  tutorRequests TutorRequest[]
+  tutorProfile  TutorProfile?
 
   @@map("users")
 }
@@ -111,10 +124,10 @@ model Account {
   userId String @db.Uuid
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  provider AuthProvider
+  provider          AuthProvider
   /// Identifier at the provider — Google's `sub`, or the normalized email for
   /// a local credentials account.
-  providerAccountId String @db.VarChar(191)
+  providerAccountId String       @db.VarChar(191)
 
   /// Argon2id hash. Only ever set for `CREDENTIALS`; the database enforces
   /// this with a CHECK constraint (see the auth migration).
@@ -140,7 +153,7 @@ model Session {
   userId String @db.Uuid
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  tokenHash String @unique @db.Char(64)
+  tokenHash String    @unique @db.Char(64)
   expiresAt DateTime
   revokedAt DateTime?
 
@@ -165,12 +178,12 @@ model Session {
 model LoginFlow {
   id String @id @default(uuid()) @db.Uuid
 
-  provider AuthProvider
+  provider     AuthProvider
   /// SHA-256 of the random `state` sent to the provider.
-  stateHash String @unique @db.Char(64)
+  stateHash    String       @unique @db.Char(64)
   /// PKCE secret for this attempt; its SHA-256 went to the provider as the
   /// code challenge.
-  codeVerifier String @db.VarChar(128)
+  codeVerifier String       @db.VarChar(128)
   expiresAt    DateTime
 
   createdAt DateTime @default(now())
@@ -200,15 +213,83 @@ model TutorRequest {
   email            String?
 
   // What the client needs
-  subject         String
-  educationLevel  String
-  description     String
-  learningMode    String
-  location        String?
-  preferredDays   String?
-  preferredTime   String?
-  budget          String?
-  additionalInfo  String?
+  subject        String
+  educationLevel String
+  description    String
+  learningMode   String
+  location       String?
+  preferredDays  String?
+  preferredTime  String?
+  budget         String?
+  additionalInfo String?
+
+  // ---- Adaptive multi-step form -------------------------------------------
+  //
+  // Every column below is additive and nullable, and every one of them is
+  // optional in the API schema. A request written by the original single-page
+  // form carries none of them and still validates, which is what makes rolling
+  // the wizard out safe without a backfill.
+
+  /// ISO 3166-1 alpha-2. A soft reference rather than a foreign key: a request
+  /// must survive a country being deactivated or merged, and the code alone is
+  /// what reporting needs. Null on requests from before the wizard.
+  countryCode String? @db.Char(2)
+
+  /// IANA timezone the client's availability is expressed in. Stored so the
+  /// admin reads "18:00–20:00 EAT" and does not have to guess where "after
+  /// school" ends. Never converted — see `budgetAmount` for why that matters.
+  timezone String? @db.VarChar(64)
+
+  /// Machine-readable form of `educationLevel`, resolved against
+  /// `education_levels`. The text column above stays the human label so the
+  /// admin UI keeps reading exactly what it always did.
+  educationLevelCode String? @db.VarChar(40)
+
+  /// Free text for the subjects a client ticked as "Other".
+  subjectOther String? @db.VarChar(200)
+
+  /// What the client is trying to achieve, from the configurable goal list.
+  learningGoal String? @db.VarChar(60)
+
+  /// Free text for the "other" learning goal.
+  learningGoalOther String? @db.VarChar(200)
+
+  /// The days the client ticked, and the availability windows in the client's
+  /// own `timezone`. Kept as sets because they are sets.
+  ///
+  /// `preferredDays` and `preferredTime` above stay the readable sentences the
+  /// admin screens have always shown; the service composes them from these, so
+  /// the two representations can never disagree about what was asked for.
+  preferredDayNames   String[] @default([])
+  preferredTimeRanges String[] @default([])
+
+  /// Budget, split so the number and the money are never conflated.
+  ///
+  /// `budgetAmount` is a number and `budgetCurrency` an ISO 4217 code; the
+  /// legacy `budget` text column is still written alongside them for the admin
+  /// list. They are separate columns precisely so an amount can never be
+  /// displayed, compared or totalled as though it were in a currency it was
+  /// not given in. No exchange rate is stored and none is applied anywhere.
+  budgetAmount   Decimal? @db.Decimal(12, 2)
+  budgetCurrency String?  @db.Char(3)
+
+  /// The market this request was made in, resolved from `countryCode` when it was
+  /// received.
+  ///
+  /// Stored rather than derived on read because it is a fact about the request,
+  /// not a property of it. An admin triaging a queue needs to know which of a
+  /// tutor's two prices the requester was looking at, and re-deriving it later
+  /// would silently answer a different question: the same `ET` that meant birr
+  /// when the request arrived would mean the international rate if the default
+  /// market changed, and the old row would appear to have been written up wrongly.
+  ///
+  /// A soft string, not a foreign key to `markets`, for the same reason as the
+  /// rate rows on a profile: a market can be withdrawn from sale while requests
+  /// taken in it still need to say which market they were taken in.
+  ///
+  /// Null on requests created before this column existed, which is honest — the
+  /// market was never recorded.
+  market String? @db.Char(3)
 
   status     TutorRequestStatus @default(NEW)
   adminNotes String?
@@ -216,27 +297,224 @@ model TutorRequest {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  subjects TutorRequestSubject[]
+
   @@index([status])
   @@index([createdAt])
   @@index([userId])
+  @@index([countryCode])
+  @@index([market])
   @@map("tutor_requests")
 }
 
 /// A topic a tutor can teach. Seeded from the SUBJECTS constant.
 model Subject {
-  id          String   @id @default(uuid()) @db.Uuid
-  name        String   @unique @db.VarChar(100)
-  slug        String   @unique @db.VarChar(100)
-  category    String   @db.VarChar(60)
-  description String?  @db.VarChar(300)
-  active      Boolean  @default(true)
+  id          String  @id @default(uuid()) @db.Uuid
+  name        String  @unique @db.VarChar(100)
+  slug        String  @unique @db.VarChar(100)
+  category    String  @db.VarChar(60)
+  description String? @db.VarChar(300)
+  active      Boolean @default(true)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  tutorProfiles TutorProfileSubject[]
+  tutorProfiles   TutorProfileSubject[]
+  educationLevels EducationLevelSubject[]
+  tutorRequests   TutorRequestSubject[]
 
   @@map("subjects")
+}
+
+/// An ISO 4217 currency, offered in the budget step.
+///
+/// A separate table rather than a free-text field on the request, for one
+/// reason: the wizard must show the code next to every amount, and a currency
+/// that can be typed as anything is a currency nobody can read. Adding a
+/// currency is an admin action, not a code change.
+model Currency {
+  /// The three-letter ISO 4217 code. Primary key, because the code *is* the
+  /// currency's identity and nothing else about it needs to be unique.
+  code String @id @db.Char(3)
+
+  name String @db.VarChar(60)
+
+  /// Display symbol, shown beside an amount. Never used to store a value.
+  symbol String @db.VarChar(8)
+
+  /// Minor-unit digits, so an amount is rendered with the right number of
+  /// decimals rather than being formatted with an assumed two.
+  decimals Int @default(2)
+
+  active    Boolean @default(true)
+  sortOrder Int     @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  countries Country[]
+  markets   Market[]
+
+  @@index([sortOrder])
+  @@map("currencies")
+}
+
+/// A named education configuration — one country's curriculum, or a generic
+/// international one.
+///
+/// The wizard never asks "which country are you in?" to decide which grades to
+/// offer; it asks it to find the `Country`, and the country points here. That
+/// indirection is the whole point: giving a new country its own configuration,
+/// or adding a level to an existing one, is a row in the database rather than a
+/// conditional in the React tree.
+model EducationSystem {
+  id String @id @default(uuid()) @db.Uuid
+
+  code String @unique @db.VarChar(20)
+
+  name String @db.VarChar(80)
+
+  description String? @db.VarChar(300)
+
+  /// Marks the system offered when a country has no configuration of its own.
+  /// Exactly one row should carry this; nothing enforces it, and a deployment
+  /// with two simply shows the first in `sortOrder` order.
+  isDefault Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  countries Country[]
+  levels    EducationLevel[]
+
+  @@map("education_systems")
+}
+
+/// A country the marketplace serves.
+///
+/// `currencyCode` and `timezone` are defaults *for the form*, not truths about
+/// the client: the wizard prefills a budget currency and a scheduling timezone
+/// from this row and then lets the person change both. Nothing in the product
+/// converts between them.
+model Country {
+  id String @id @default(uuid()) @db.Uuid
+
+  /// ISO 3166-1 alpha-2, uppercase.
+  code String @unique @db.Char(2)
+
+  name String @db.VarChar(80)
+
+  currencyCode String   @db.Char(3)
+  currency     Currency @relation(fields: [currencyCode], references: [code])
+
+  /// IANA timezone identifier, e.g. `Africa/Addis_Ababa`. Prefills the
+  /// availability step for a client who has not chosen another one.
+  timezone String @db.VarChar(64)
+
+  educationSystemId String          @db.Uuid
+  educationSystem   EducationSystem @relation(fields: [educationSystemId], references: [id])
+
+  active    Boolean @default(true)
+  sortOrder Int     @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([sortOrder])
+  @@map("countries")
+}
+
+/// One stage of a curriculum, such as "Grades 9–10" or "Primary School".
+model EducationLevel {
+  id String @id @default(uuid()) @db.Uuid
+
+  /// Stable, URL-safe identifier the API and the wizard exchange. The display
+  /// `name` may be reworded freely without breaking a stored request.
+  code String @unique @db.VarChar(40)
+
+  name String @db.VarChar(80)
+
+  /// Grouping for the picker: "Primary", "Senior Secondary", "Higher Education"
+  /// and so on. Presentation only.
+  stage String @db.VarChar(40)
+
+  educationSystemId String          @db.Uuid
+  educationSystem   EducationSystem @relation(fields: [educationSystemId], references: [id])
+
+  /// Alternative labels this level answers to, used to resolve links built
+  /// before the level was renamed ("University" resolving to "University /
+  /// College"). Without it a saved `/request-tutor?level=University` link would
+  /// quietly stop working the first time the wording changed.
+  aliases String[] @default([])
+
+  active    Boolean @default(true)
+  sortOrder Int     @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  subjects EducationLevelSubject[]
+
+  @@index([educationSystemId, sortOrder])
+  @@map("education_levels")
+}
+
+/// Which subjects are usually taught at which level.
+///
+/// This is what makes the subject step contextual: the wizard offers the rows
+/// linked to the level the client just chose, in the curriculum of the country
+/// they are in, and offers everything else separately. Suggestions are
+/// advisory — the client can still pick anything, which is why this is a join
+/// table and not a constraint.
+model EducationLevelSubject {
+  educationLevelId String         @db.Uuid
+  educationLevel   EducationLevel @relation(fields: [educationLevelId], references: [id], onDelete: Cascade)
+  subjectId        String         @db.Uuid
+  subject          Subject        @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+
+  @@id([educationLevelId, subjectId])
+  @@index([subjectId])
+  @@map("education_level_subjects")
+}
+
+/// What the client wants tutoring *for*, as distinct from what subject it is.
+///
+/// Separate from the subject list because "Mathematics" and "I am behind on
+/// quadratic equations before my Grade 12 exam" are different answers, and an
+/// admin triaging the queue needs the second one to know who to send.
+model LearningGoal {
+  id String @id @default(uuid()) @db.Uuid
+
+  code String @unique @db.VarChar(40)
+
+  name String @db.VarChar(80)
+
+  description String? @db.VarChar(300)
+
+  active    Boolean @default(true)
+  sortOrder Int     @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([sortOrder])
+  @@map("learning_goals")
+}
+
+/// Which subjects a request asked for.
+///
+/// Many-to-many, and separate from the `subject` text column: that column
+/// predates multi-select and stays as the single readable summary the admin
+/// list shows. The join is the queryable one.
+model TutorRequestSubject {
+  tutorRequestId String       @db.Uuid
+  tutorRequest   TutorRequest @relation(fields: [tutorRequestId], references: [id], onDelete: Cascade)
+  subjectId      String       @db.Uuid
+  subject        Subject      @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+
+  @@id([tutorRequestId, subjectId])
+  @@index([subjectId])
+  @@map("tutor_request_subjects")
 }
 
 /// A tutor's public-facing professional profile, linked one-to-one to a User.
@@ -253,34 +531,153 @@ model TutorProfile {
   profilePhotoUrl String? @db.VarChar(2048)
 
   teachingMode  TeachingMode
-  studentLevels String[]     // values from EDUCATION_LEVELS constant
+  studentLevels String[] // values from EDUCATION_LEVELS constant
   languages     String[]     @default(["English"])
   availability  String?      @db.VarChar(300)
 
-  hourlyRate Decimal? @db.Decimal(10, 2)
-  experience String?  @db.VarChar(2000)
-  education  String?  @db.VarChar(2000)
+  /// Hourly rates live in `TutorProfileRate`, one row per market the tutor sells
+  /// into. A rate is the tutor's own price for that market; nothing in this
+  /// codebase converts between them.
+
+  experience String? @db.VarChar(2000)
+  education  String? @db.VarChar(2000)
 
   profileStatus      ProfileStatus      @default(DRAFT)
   verificationStatus VerificationStatus @default(UNVERIFIED)
 
   // Extended verification workflow fields
-  applicationReference String?   @unique @db.VarChar(20)
-  rejectionReason      String?   @db.VarChar(100)
-  adminMessage         String?   @db.VarChar(2000)
-  adminNotes           String?   @db.VarChar(4000)
+  applicationReference  String?   @unique @db.VarChar(20)
+  rejectionReason       String?   @db.VarChar(100)
+  adminMessage          String?   @db.VarChar(2000)
+  adminNotes            String?   @db.VarChar(4000)
   verificationChecklist Json?
-  verifiedAt           DateTime?
+  verifiedAt            DateTime?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   subjects      TutorProfileSubject[]
   tutorRequests TutorRequest[]
+  rates         TutorProfileRate[]
 
   @@index([profileStatus])
   @@index([createdAt])
   @@map("tutor_profiles")
+}
+
+/// Admin-controlled overrides for the homepage statistics band.
+///
+/// A single row. Every column is nullable and NULL means "use the live count",
+/// which is the default state and the state the platform ships in: with no row
+/// at all, `GET /api/public/stats` reports exactly what the database contains.
+///
+/// A non-null column replaces the live count for that one figure. The live
+/// count is never stored here — it is recomputed on every request — so an
+/// override cannot silently freeze a figure that should be tracking the
+/// marketplace.
+///
+/// The band is deliberately limited to the four counts the homepage already
+/// shows. This table is not a general content-management system, and adding a
+/// metric to it would mean adding one to the homepage too.
+model PlatformStats {
+  /// Always the literal 'singleton'. A fixed primary key is what makes "one row"
+  /// enforceable in the database rather than only in application code.
+  id String @id @default("singleton")
+
+  approvedTutors Int?
+  subjects       Int?
+  universities   Int?
+  countries      Int?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("platform_stats")
+}
+
+/// A market a tutor can sell into, and the currency that market thinks in.
+///
+/// The registry that makes pricing extensible. Adding a third market — Nigeria in
+/// naira, Kenya in shillings — is a row here plus the country rows that point at
+/// it, not a new column on `tutor_profiles` and not a conditional in the React
+/// tree. Nothing converts between markets: each tutor states their own price in
+/// each one they sell into.
+model Market {
+  /// The currency this market prices in, which is also what identifies the
+  /// market. `ETB` is Ethiopia, `USD` is everywhere else, and the code is what a
+  /// stored request and a URL both use.
+  code String @id @db.Char(3)
+
+  /// What the market is called in the interface, e.g. "Ethiopia".
+  name String @db.VarChar(60)
+
+  /// The currency's name, so the selector can read "US Dollar" without a lookup
+  /// the browser would otherwise have to make.
+  currencyName String @db.VarChar(60)
+
+  /// Symbol shown beside an amount, e.g. "Br" or "$".
+  symbol String @db.VarChar(8)
+
+  /// Minor-unit digits, so an amount is rendered with the precision its currency
+  /// actually has rather than an assumed two.
+  decimals Int @default(2)
+
+  /// How an amount in this market is written to a learner: `symbol` gives "$20",
+  /// `code` gives "1,500 ETB".
+  ///
+  /// Per market rather than a rule in the formatter because the two cases here are
+  /// opposites. "$" is recognised everywhere, so a symbol says more than the code.
+  /// "Br" is shared with Burundi's franc and means nothing to most readers, so the
+  /// birr price has to spell out ETB to be usable at all. A formatter that decided
+  /// this by asking whether the symbol is alphabetic would be encoding currency
+  /// design folklore in a loop; the answer belongs beside the currency.
+  priceFormat String @default("symbol") @db.VarChar(10)
+
+  /// Whether this is the market served to a visitor who has said nothing.
+  /// Exactly one row should carry it; the seed converges on one.
+  isDefault Boolean @default(false)
+
+  active    Boolean @default(true)
+  sortOrder Int     @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  /// The currency row this market prices in. A real relation rather than a
+  /// duplicated string, so a market cannot name a currency the platform has never
+  /// heard of.
+  currency Currency @relation(fields: [code], references: [code], onDelete: Restrict)
+
+  @@index([sortOrder])
+  @@map("markets")
+}
+
+/// One tutor's hourly rate in one market.
+///
+/// A row per market rather than a column per market, so a third market is data.
+/// The pair is the price: `amount` without `marketCode` would be a number whose
+/// unit is a guess, which is the one thing this table exists to prevent.
+model TutorProfileRate {
+  tutorProfileId String       @db.Uuid
+  tutorProfile   TutorProfile @relation(fields: [tutorProfileId], references: [id], onDelete: Cascade)
+
+  /// Matches `Market.code`. A plain string rather than a foreign key so a market
+  /// can be deactivated for new signups while existing tutors keep trading in it,
+  /// and so a tutor's stored price survives a market being removed.
+  marketCode String @db.Char(3)
+
+  /// What an hour of this tutor's teaching costs in this market.
+  ///
+  /// Always positive: zero is not a price, and a tutor who wants to offer a free
+  /// first lesson can leave that market unpriced instead.
+  amount Decimal @db.Decimal(10, 2)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@id([tutorProfileId, marketCode])
+  @@index([marketCode, amount])
+  @@map("tutor_profile_rates")
 }
 
 /// Join table for the TutorProfile ↔ Subject many-to-many relationship.

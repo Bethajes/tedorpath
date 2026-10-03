@@ -18,6 +18,7 @@ import { after, before, describe, it } from 'node:test'
 import { createApp } from '../src/app.js'
 import { SESSION_COOKIE_NAME } from '../src/modules/auth/cookies.js'
 import { closePrisma, prisma } from '../src/lib/prisma.js'
+import { ratesFor, withoutRates } from './helpers/rates.mjs'
 
 let server
 let baseUrl
@@ -136,7 +137,8 @@ async function seedProfile(userId, overrides = {}) {
       studentLevels: ['High School'],
       profileStatus: 'DRAFT',
       verificationStatus: 'UNVERIFIED',
-      ...overrides,
+      ...withoutRates(overrides),
+      rates: ratesFor(overrides),
       userId,
     },
   })
@@ -145,6 +147,13 @@ async function seedProfile(userId, overrides = {}) {
 }
 
 /** Creates a profile through the API and records it for cleanup. */
+/**
+ * Creates a profile through the API and records it for cleanup.
+ *
+ * Overrides are sent as written, including the pre-markets `hourlyRateEtb` /
+ * `hourlyRateUsd` pair. The API accepts that shape on purpose, so the suite that
+ * exercises the old contract keeps working and a regression in it would fail.
+ */
 async function createViaApi(token, overrides = {}) {
   const result = await api('/api/tutor-profile', {
     method: 'POST',
@@ -506,7 +515,8 @@ describe('GET /api/tutor-profile/me', () => {
       location: 'Addis Ababa',
       profilePhotoUrl: 'https://example.com/a.png',
       availability: 'Evenings',
-      hourlyRate: 40,
+      hourlyRateEtb: 900,
+      hourlyRateUsd: 12,
       experience: 'Ten years',
       education: 'MSc',
       languages: ['English', 'Amharic'],
@@ -522,7 +532,14 @@ describe('GET /api/tutor-profile/me', () => {
     assert.equal(body.data.profileStatus, 'DRAFT')
 
     // Fields that only matter before approval must still be present here.
-    for (const field of ['hourlyRate', 'availability', 'experience', 'education', 'languages']) {
+    for (const field of [
+      'hourlyRateEtb',
+      'hourlyRateUsd',
+      'availability',
+      'experience',
+      'education',
+      'languages',
+    ]) {
       assert.ok(field in body.data, `${field} should be returned to the owner`)
     }
     assert.deepEqual(body.data.studentLevels, ['High School', 'University'])
@@ -546,7 +563,7 @@ describe('GET /api/tutor-profile/me', () => {
 describe('POST /api/tutor-profile/submit', () => {
   it('moves a complete draft to PENDING_REVIEW', async () => {
     const { userId, token } = await createUser()
-    await seedProfile(userId, { hourlyRate: 30 })
+    await seedProfile(userId, { hourlyRateEtb: 900 })
     await attachSubject(userId)
 
     const { status, body } = await api('/api/tutor-profile/submit', { method: 'POST', token })
@@ -560,7 +577,7 @@ describe('POST /api/tutor-profile/submit', () => {
 
   it('accepts a profile created through the API once a subject is added', async () => {
     const { token } = await createUser()
-    await createViaApi(token, { hourlyRate: 25 })
+    await createViaApi(token, { hourlyRateEtb: 900 })
     const subjectId = await createSubject()
 
     await api('/api/tutor-profile', { method: 'PATCH', token, body: { subjectIds: [subjectId] } })
@@ -572,32 +589,36 @@ describe('POST /api/tutor-profile/submit', () => {
 
   it('returns 422 and names the missing fields', async () => {
     const { userId, token } = await createUser()
-    // No subject and no hourly rate: the two fields a create cannot supply.
-    await seedProfile(userId, { hourlyRate: null })
+    // No subject and no rate in any market: the two things a create cannot supply.
+    // The field is named `rates` rather than a market, because the rule is
+    // "price at least one market" and it should not have to be restated per market.
+    await seedProfile(userId, { hourlyRateEtb: null, hourlyRateUsd: null })
 
     const { status, body } = await api('/api/tutor-profile/submit', { method: 'POST', token })
 
     assert.equal(status, 422)
     assert.equal(body.error.code, 'INCOMPLETE_PROFILE')
     assert.ok(Array.isArray(body.error.fields), 'the missing fields must be listed')
-    assert.deepEqual([...body.error.fields].sort(), ['hourlyRate', 'subjects'])
+    assert.deepEqual([...body.error.fields].sort(), ['rates', 'subjects'])
   })
 
-  it('treats a zero hourly rate as present', async () => {
+  it('accepts a tutor who priced only one market', async () => {
     const { userId, token } = await createUser()
-    await seedProfile(userId, { hourlyRate: 0 })
+    // Serving one market and declining the other is normal — most tutors do not
+    // take international bookings — so it must not block a submission.
+    await seedProfile(userId, { hourlyRateEtb: 900 })
     await attachSubject(userId)
 
     const { status, body } = await api('/api/tutor-profile/submit', { method: 'POST', token })
 
-    assert.equal(status, 200, 'a free session is still a stated rate')
+    assert.equal(status, 200, 'one priced market is enough to submit')
     assert.equal(body.data.profileStatus, 'PENDING_REVIEW')
   })
 
   it('reports blank identity fields as missing', async () => {
     const { userId, token } = await createUser()
     // The columns are NOT NULL, so a blank field is stored as an empty string.
-    await seedProfile(userId, { displayName: '', headline: '', bio: '', hourlyRate: 20 })
+    await seedProfile(userId, { displayName: '', headline: '', bio: '', hourlyRateEtb: 900 })
     await attachSubject(userId)
 
     const { status, body } = await api('/api/tutor-profile/submit', { method: 'POST', token })
@@ -613,7 +634,7 @@ describe('POST /api/tutor-profile/submit', () => {
 
   it('reports empty student levels as missing', async () => {
     const { userId, token } = await createUser()
-    await seedProfile(userId, { studentLevels: [], hourlyRate: 20 })
+    await seedProfile(userId, { studentLevels: [], hourlyRateEtb: 900 })
     await attachSubject(userId)
 
     const { status, body } = await api('/api/tutor-profile/submit', { method: 'POST', token })

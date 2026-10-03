@@ -51,14 +51,53 @@ const requiredText = (fieldName, max) =>
     .min(1, `${fieldName} is required.`)
     .max(max, `${fieldName} must be at most ${max} characters.`)
 
-// Helper for decimal field (hourlyRate)
-const decimalField = () =>
+// Helper for a per-market hourly rate.
+//
+// Strictly positive: a rate of zero is not a price, and a tutor who wants to
+// offer a free first lesson leaves that market unpriced instead — which the
+// directory reports honestly rather than advertising free lessons. The ceiling is
+// shared by every market so two numbers on the same screen stay comparable.
+const rateField = () =>
   z
     .number()
-    .min(0, 'Hourly rate cannot be negative.')
-    .max(9999.99, 'Hourly rate cannot exceed 9999.99.')
+    .positive('An hourly rate must be greater than zero.')
+    .max(9999.99, 'An hourly rate cannot exceed 9999.99.')
     .nullable()
     .optional()
+
+/**
+ * A market code on the rates map.
+ *
+ * Normalised to upper case so `etb` and `ETB` are one market rather than two, and
+ * deliberately not constrained to the codes that exist today: whether a code names
+ * a market the platform sells in is a question about the `markets` table, so it is
+ * answered by the service against that table and reported as a normal field error.
+ */
+const rateMarketCode = () =>
+  z
+    .string()
+    .trim()
+    .toUpperCase()
+    .min(1, 'A market code is required.')
+    .max(8, 'That market code is not valid.')
+
+/**
+ * The rates, keyed by market code.
+ *
+ * A map rather than a named field per market, so adding a market does not change
+ * this contract. The market codes themselves are checked against the `markets`
+ * table in the service, because they are data.
+ */
+const ratesField = () => z.record(rateMarketCode(), rateField()).optional()
+
+/**
+ * The pre-markets shape, still accepted.
+ *
+ * `hourlyRateEtb` / `hourlyRateUsd` were how a rate was expressed before
+ * markets were data. Accepting them keeps a bundle already in a tutor's browser
+ * cache working; they are folded into `rates` by the service, which is the only
+ * place the two representations meet.
+ */
 
 /**
  * A profile photo is either an externally hosted http(s) URL or one of our own
@@ -101,7 +140,9 @@ export const createTutorProfileSchema = z
     studentLevels: z.array(z.enum(EDUCATION_LEVELS)).optional(),
     languages: z.array(z.string().trim().max(50)).optional(),
     availability: optionalText(300),
-    hourlyRate: decimalField(),
+    rates: ratesField(),
+    hourlyRateEtb: rateField(),
+    hourlyRateUsd: rateField(),
     experience: optionalText(2000),
     education: optionalText(2000),
     subjectIds: z.array(z.string().uuid()).optional(),
@@ -130,7 +171,9 @@ export const updateTutorProfileSchema = z
     studentLevels: z.array(z.enum(EDUCATION_LEVELS)).optional(),
     languages: z.array(z.string().trim().max(50)).optional(),
     availability: optionalText(300),
-    hourlyRate: decimalField(),
+    rates: ratesField(),
+    hourlyRateEtb: rateField(),
+    hourlyRateUsd: rateField(),
     experience: optionalText(2000),
     education: optionalText(2000),
     subjectIds: z.array(z.string().uuid()).optional(),
@@ -191,7 +234,39 @@ export function validateProfileCompleteness(profile) {
   if (!profile.headline) missingFields.push('headline')
   if (!profile.bio) missingFields.push('bio')
   if (!profile.teachingMode) missingFields.push('teachingMode')
-  if (profile.hourlyRate === null || profile.hourlyRate === undefined) missingFields.push('hourlyRate')
+  /*
+   * BOTH markets priced, not one.
+   *
+   * This used to require a price in at least one market, on the reasoning that a
+   * tutor who only takes local bookings is a valid profile. That is now a
+   * requirement on registration instead, and deliberately so:
+   *
+   *   - Ethiopia is the platform's default market, so an unpriced ETB rate is a
+   *     tutor whose primary listing has no price on it at all.
+   *   - A parent in the United States is served the international rate. A tutor who
+   *     has not stated one is invisible to them — not shown at an assumed price,
+   *     simply absent, which is a worse outcome than being asked the question at
+   *     signup.
+   *
+   * The two rates stay independent: neither is derived from the other and there is
+   * no exchange rate in this product, so both are values the tutor typed.
+   *
+   * Enumerated over the rate map rather than naming two markets, so a market added
+   * to the registry later does not quietly become optional.
+   */
+  const rates = profile.rates ?? {}
+  const missingMarkets = Object.keys(rates).filter((code) => rates[code] == null)
+
+  if (missingMarkets.length === Object.keys(rates).length) {
+    // Nothing priced at all. Reported as `rates`, which is the field the tutor
+    // actually filled in — listing every market would read as four separate
+    // mistakes when the answer is "none of them".
+    missingFields.push('rates')
+  } else {
+    for (const code of missingMarkets) {
+      missingFields.push(`rates.${code}`)
+    }
+  }
   
   // At least one subject required
   if (!profile.subjects || profile.subjects.length === 0) missingFields.push('subjects')

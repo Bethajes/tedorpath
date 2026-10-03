@@ -42,3 +42,23 @@ export const AdminTutorsPage = lazy(() =>
 export const AdminTutorReviewPage = lazy(() =>
   import('@/pages/AdminTutorReviewPage').then((m) => ({ default: m.AdminTutorReviewPage })),
 )
+
+export const AdminSiteStatsPage = lazy(() =>
+  import('@/pages/AdminSiteStatsPage').then((m) => ({ default: m.AdminSiteStatsPage })),
+)
+
+export const AdminAnalyticsPage = lazy(() =>
+  import('@/pages/AdminAnalyticsPage').then((m) => ({ default: m.AdminAnalyticsPage })),
+)
+
+export const AdminMatchingPage = lazy(() =>
+  import('@/pages/AdminMatchingPage').then((m) => ({ default: m.AdminMatchingPage })),
+)
+
+export const AdminContentPage = lazy(() =>
+  import('@/pages/AdminContentPage').then((m) => ({ default: m.AdminContentPage })),
+)
+
+export const AdminMessagesPage = lazy(() =>
+  import('@/pages/AdminMessagesPage').then((m) => ({ default: m.AdminMessagesPage })),
+)

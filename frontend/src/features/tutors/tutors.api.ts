@@ -66,6 +66,18 @@ export function buildTutorSearchParams(
 ): URLSearchParams {
   const query = new URLSearchParams()
 
+  // The market is deliberately absent.
+  //
+  // It used to be sent on every request, because the client decided which market to
+  // show and the server needed to be told. Now the server works it out from who is
+  // asking, so sending it would only be a second opinion competing with the one
+  // that is right — and a stale one in the URL, after a learner changes country,
+  // would quietly pin them to old prices.
+  //
+  // The rate range and the price sort still send no market either, for the same
+  // reason: they are held to whatever market the server resolves, so a filter can
+  // never be applied in one currency against prices rendered in another.
+
   setIfPresent(query, 'q', filters.q)
   setIfPresent(query, 'subject', filters.subject)
   setIfPresent(query, 'level', filters.studentLevel)
@@ -110,6 +122,14 @@ export function listTutors(
  *
  * The id is URL-encoded because it comes from a route parameter: without it a
  * crafted `/tutors/../admin` segment would escape the path.
+ *
+ * No market parameter, deliberately.
+ *
+ * A card used to link here carrying `?market=`, so the profile could not disagree
+ * with the card about which of a tutor's prices to show. That was needed when the
+ * client chose the market. Now the server chooses it the same way on both
+ * requests — from the same account, the same cookie and the same network — so there
+ * is nothing to carry, and a link stays a clean path a person can read out loud.
  *
  * @throws {ApiError} with code `NOT_FOUND` when the profile does not exist or
  * is not APPROVED. The API deliberately does not distinguish the two, so a

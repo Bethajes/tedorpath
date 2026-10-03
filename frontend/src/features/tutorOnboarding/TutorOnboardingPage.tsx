@@ -66,7 +66,20 @@ function profileToFormData(profile: MyTutorProfile): Partial<OnboardingFormData>
     teachingMode: profile.teachingMode ?? '',
     experience: profile.experience ?? '',
     education: profile.education ?? '',
-    hourlyRate: profile.hourlyRate != null ? String(profile.hourlyRate) : '',
+    /*
+     * Every stored rate becomes a form field, whatever market it is for.
+     *
+     * Reverse-engineered from the profile rather than from the market registry, so
+     * a rate stored in a market that is no longer offered is still shown to the tutor
+     * who set it. Reading the registry instead would silently drop it from the form,
+     * and saving the form afterwards would then delete it.
+     */
+    rates: Object.fromEntries(
+      Object.entries(profile.rates ?? {}).map(([marketCode, amount]) => [
+        marketCode,
+        amount == null ? '' : String(amount),
+      ]),
+    ),
     languages: (profile.languages ?? ['English']).join(', '),
     availability: profile.availability ?? '',
   }

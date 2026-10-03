@@ -1,17 +1,22 @@
 import { Router } from 'express'
 
+import { optionalAuth } from '../auth/middleware.js'
+
 import { getTutorHandler, listTutorsHandler } from './controller.js'
 import { getPublicStats } from './statsController.js'
 
 /**
  * Public tutor directory routes.
  *
- * No authentication required — the directory is public.
+ * No authentication required — the directory is public. `optionalAuth` rather than
+ * no middleware at all: it never rejects, it only attaches the user when a session
+ * happens to be present, and the saved country on that account is the strongest
+ * signal the pricing code has about which of a tutor's rates to show.
  */
 export const tutorsRouter = Router()
 
-tutorsRouter.get('/', listTutorsHandler)
-tutorsRouter.get('/:id', getTutorHandler)
+tutorsRouter.get('/', optionalAuth, listTutorsHandler)
+tutorsRouter.get('/:id', optionalAuth, getTutorHandler)
 
 /**
  * Public homepage statistics.

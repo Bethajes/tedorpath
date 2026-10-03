@@ -28,7 +28,38 @@ export const TELEGRAM_CONTACT = readEnv(import.meta.env.VITE_CONTACT_TELEGRAM)
 export const WHATSAPP_CONTACT = readEnv(import.meta.env.VITE_CONTACT_WHATSAPP)
 
 /**
- * The Telegram handle, read at call time.
+ * The configured email address, e.g. `hello@example.com`.
+ *
+ * Rendered in the footer's Support column. Optional like the others: with no
+ * value the line is not rendered at all, so a deployment that has not chosen an
+ * address shows no broken `mailto:`.
+ */
+export const EMAIL_CONTACT = readEnv(import.meta.env.VITE_CONTACT_EMAIL)
+
+/**
+ * The email address, read at call time. See `telegramHandle` for why this is a
+ * function rather than a constant read at import.
+ */
+export function emailContact(): string {
+  return readEnv(import.meta.env.VITE_CONTACT_EMAIL)
+}
+
+/**
+ * The team's public Telegram handle, shown to clients after they send a request.
+ *
+ * Defaults to the Tedor Tutors account rather than to nothing. Unlike the two
+ * channels above, this one is not a development convenience: a learner who has
+ * just filled in eleven steps and been told "we will contact you shortly" has no
+ * way to chase that without a way to reach us, so the button is part of the
+ * confirmation rather than a deployment detail. Setting
+ * `VITE_CONTACT_TELEGRAM` still redirects it, for a deployment with its own
+ * account.
+ */
+export const CLIENT_TELEGRAM_CONTACT =
+  readEnv(import.meta.env.VITE_CONTACT_TELEGRAM) || '@Tedor_Team'
+
+/**
+ * The Telegram handle a component should use, read at call time.
  *
  * A component must use this rather than the module-level constant: build-time
  * env is resolved when this file is first imported, so a value read once at
@@ -48,6 +79,35 @@ export function whatsappNumber(): string {
 export const HAS_CONTACT_DETAILS = Boolean(TELEGRAM_CONTACT || WHATSAPP_CONTACT)
 
 /**
+ * A deliberately narrow email shape.
+ *
+ * The address ends up in a `mailto:` href on every page, and `mailto:` takes
+ * query parameters — so `mailto:a@b.com?body=…` is a valid href that carries
+ * content an operator never wrote. Anything carrying a `?`, `#`, whitespace or a
+ * second `@` is refused outright rather than trimmed and used, because a
+ * half-valid address should show as "not configured" instead of quietly
+ * producing a surprising link.
+ */
+const PLAUSIBLE_EMAIL = /^[^\s@?#]+@[^\s@?#]+\.[^\s@?#]+$/
+
+/**
+ * Build a `mailto:` link. Returns null when no plausible address is configured.
+ *
+ * The address is percent-encoded rather than interpolated raw, so a `+` in a
+ * Gmail address keeps working (it is a real character there, not a space) while
+ * a stray `?` could never start a query string.
+ */
+export function emailLink(address: string = emailContact()): string | null {
+  const value = readEnv(address)
+  if (!value || !PLAUSIBLE_EMAIL.test(value)) return null
+
+  return `mailto:${value
+    .split('@')
+    .map((part) => encodeURIComponent(part))
+    .join('@')}`
+}
+
+/**
  * Build a Telegram deep link.
  *
  * `https://t.me/<handle>` opens a chat with the account. A leading `@` is
@@ -65,6 +125,17 @@ export function telegramLink(handle: string = telegramHandle()): string | null {
   const bare = handle.replace(/^@/, '')
   if (!bare) return null
   return `https://t.me/${encodeURIComponent(bare)}`
+}
+
+/**
+ * The link shown on the request confirmation card.
+ *
+ * Always resolves: it falls back to the team's published handle rather than to
+ * nothing, because the confirmation is the only place a client is told how to
+ * reach us.
+ */
+export function clientTelegramLink(): string {
+  return telegramLink(CLIENT_TELEGRAM_CONTACT) ?? 'https://t.me/Tedor_Team'
 }
 
 /** Build a WhatsApp click-to-chat link. Returns null when not configured. */

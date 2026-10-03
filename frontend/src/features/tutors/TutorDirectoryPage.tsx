@@ -141,6 +141,14 @@ export function TutorDirectoryPage() {
 
   const [drawerOpen, setDrawerOpen] = useState(false)
 
+  /*
+   * No market is sent, and none is known here.
+   *
+   * The server prices this response in whichever market belongs to whoever is
+   * asking, and sends one price per card. The client does not choose, cannot change
+   * the answer, and does not need to know it: `hourlyRateCurrency` arrives with the
+   * number so the card can write it correctly.
+   */
   const fetchTutors = useCallback(
     () => listTutors({ ...filters, sort }, page, DEFAULT_TUTOR_PAGE_SIZE),
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -154,7 +162,11 @@ export function TutorDirectoryPage() {
   )
 
   function applyFilters(next: TutorFilters) {
-    const base = buildTutorSearchParams({ ...next, sort: next.sort ?? sort }, 1, DEFAULT_TUTOR_PAGE_SIZE)
+    const base = buildTutorSearchParams(
+      { ...next, sort: next.sort ?? sort },
+      1,
+      DEFAULT_TUTOR_PAGE_SIZE,
+    )
     setSearchParams(base, { replace: true })
   }
 
@@ -167,6 +179,7 @@ export function TutorDirectoryPage() {
     const base = buildTutorSearchParams({ ...filters, sort }, nextPage, DEFAULT_TUTOR_PAGE_SIZE)
     setSearchParams(base, { replace: true })
   }
+
 
   function handleSearchSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
@@ -198,6 +211,7 @@ export function TutorDirectoryPage() {
           <p className="mt-2 text-lg text-ink-600">
             Browse approved tutors and find the right match for you.
           </p>
+
         </header>
 
         {/*

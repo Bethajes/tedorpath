@@ -2,11 +2,16 @@ import { Suspense, type ReactNode } from 'react'
 import { createBrowserRouter } from 'react-router-dom'
 
 import {
+  AdminAnalyticsPage,
+  AdminContentPage,
   AdminDashboardPage,
   AdminFallback,
   AdminLoginPage,
+  AdminMatchingPage,
+  AdminMessagesPage,
   AdminRequestDetailPage,
   AdminRequestsPage,
+  AdminSiteStatsPage,
   AdminTutorReviewPage,
   AdminTutorsPage,
 } from '@/app/adminPages'
@@ -74,12 +79,20 @@ export const router = createBrowserRouter([
     ),
   },
   { path: '/admin', element: admin(<AdminDashboardPage />) },
+  { path: '/admin/analytics', element: admin(<AdminAnalyticsPage />) },
   { path: '/admin/requests', element: admin(<AdminRequestsPage />) },
   { path: '/admin/requests/:id', element: admin(<AdminRequestDetailPage />) },
   // Tutor moderation queue and the per-profile review workspace.
   // Requirements: 23.1, 24.1
   { path: '/admin/tutors', element: admin(<AdminTutorsPage />) },
   { path: '/admin/tutors/:id', element: admin(<AdminTutorReviewPage />) },
+  // Homepage statistics: the live counts behind the trust band, plus the
+  // overrides an admin may put on top of them.
+  { path: '/admin/site-stats', element: admin(<AdminSiteStatsPage />) },
+  // Matching queue, subject catalogue and the reserved messages section.
+  { path: '/admin/matching', element: admin(<AdminMatchingPage />) },
+  { path: '/admin/content', element: admin(<AdminContentPage />) },
+  { path: '/admin/messages', element: admin(<AdminMessagesPage />) },
 
   { path: '*', element: <NotFoundPage /> },
 ])

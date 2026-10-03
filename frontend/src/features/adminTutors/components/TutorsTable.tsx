@@ -26,10 +26,10 @@ import { PROFILE_STATUS_LABELS } from '../adminTutors.types'
 const MAX_SUBJECT_BADGES = 3
 
 const STATUS_BADGE_CLASSES: Record<ProfileStatus, string> = {
-  DRAFT: 'bg-slate-100 text-slate-700',
+  DRAFT: 'bg-ink-100 text-ink-700',
   PENDING_REVIEW: 'bg-amber-100 text-amber-800',
   APPROVED: 'bg-emerald-100 text-emerald-800',
-  SUSPENDED: 'bg-slate-200 text-slate-800',
+  SUSPENDED: 'bg-ink-200 text-ink-800',
   REJECTED: 'bg-red-100 text-red-800',
   NEEDS_INFORMATION: 'bg-orange-100 text-orange-800',
 }
@@ -55,20 +55,35 @@ function truncate(value: string, max: number): string {
   return `${(lastSpace > max * 0.6 ? cut.slice(0, lastSpace) : cut).trimEnd()}…`
 }
 
-function formatRate(value: string | number | null): string {
-  if (value === null || value === '') return '—'
-  // A rate of 0 is a real rate, so this must not be treated as "not set".
-  return `£${value}/hr`
+/**
+ * A tutor's rates, for the moderation queue.
+ *
+ * Both markets, joined. A moderator approving a profile needs to see that an
+ * international rate exists at all, and a row showing only one of the two would
+ * hide exactly that.
+ *
+ * "—" only when neither is offered. A rate of 0 is a real price — a free first
+ * lesson — so it must never collapse into "not set".
+ */
+function formatRates(item: {
+  hourlyRateEtb: number | null
+  hourlyRateUsd: number | null
+}): string {
+  const parts: string[] = []
+  if (item.hourlyRateEtb != null) parts.push(`${item.hourlyRateEtb} ETB`)
+  if (item.hourlyRateUsd != null) parts.push(`${item.hourlyRateUsd} USD`)
+
+  return parts.length > 0 ? `${parts.join(' · ')}/hr` : '—'
 }
 
 export function TutorsTable({ items }: { items: AdminTutorListItem[] }) {
   return (
-    <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm">
+    <div className="overflow-x-auto rounded-xl border border-ink-200 bg-white shadow-sm">
       <table className="w-full min-w-[56rem] text-left text-sm">
         <caption className="sr-only">
           Tutor applications, newest first. Each row links to the review workspace.
         </caption>
-        <thead className="border-b border-slate-200 bg-slate-50 text-xs uppercase tracking-wide text-slate-600">
+        <thead className="border-b border-ink-200 bg-ink-50 text-xs uppercase tracking-wide text-ink-600">
           <tr>
             <th scope="col" className="px-4 py-3 font-semibold">Applicant</th>
             <th scope="col" className="px-4 py-3 font-semibold">Subjects</th>
@@ -79,13 +94,13 @@ export function TutorsTable({ items }: { items: AdminTutorListItem[] }) {
             <th scope="col" className="px-4 py-3 font-semibold">Status</th>
           </tr>
         </thead>
-        <tbody className="divide-y divide-slate-100">
+        <tbody className="divide-y divide-ink-100">
           {items.map((item) => {
             const reviewHref = `/admin/tutors/${item.id}`
             const extraSubjects = item.subjects.length - MAX_SUBJECT_BADGES
 
             return (
-              <tr key={item.id} className="align-top transition-colors hover:bg-slate-50">
+              <tr key={item.id} className="align-top transition-colors hover:bg-ink-50">
                 <th scope="row" className="px-4 py-3 font-normal">
                   <div className="flex items-start gap-3">
                     {/* The list endpoint deliberately does not send the photo
@@ -94,42 +109,42 @@ export function TutorsTable({ items }: { items: AdminTutorListItem[] }) {
                         page. */}
                     <span
                       aria-hidden="true"
-                      className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-slate-200 text-sm font-semibold text-slate-600"
+                      className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-ink-200 text-sm font-semibold text-ink-600"
                     >
                       {item.displayName.trim().charAt(0).toUpperCase() || '?'}
                     </span>
                     <div className="min-w-0">
                       <Link
                         to={reviewHref}
-                        className="block font-semibold text-slate-900 hover:text-brand-700 hover:underline"
+                        className="block font-semibold text-ink-900 hover:text-brand-700 hover:underline"
                       >
                         {item.displayName}
                       </Link>
                       {item.headline ? (
-                        <p className="mt-0.5 max-w-[22rem] text-xs text-slate-600">
+                        <p className="mt-0.5 max-w-[22rem] text-xs text-ink-600">
                           {truncate(item.headline, 80)}
                         </p>
                       ) : null}
-                      <p className="mt-0.5 text-xs text-slate-500">{item.user.email}</p>
+                      <p className="mt-0.5 text-xs text-ink-500">{item.user.email}</p>
                     </div>
                   </div>
                 </th>
 
                 <td className="px-4 py-3">
                   {item.subjects.length === 0 ? (
-                    <span className="text-slate-400">—</span>
+                    <span className="text-ink-400">—</span>
                   ) : (
                     <div className="flex flex-wrap gap-1.5">
                       {item.subjects.slice(0, MAX_SUBJECT_BADGES).map((subject) => (
                         <span
                           key={subject.id}
-                          className="whitespace-nowrap rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-700"
+                          className="whitespace-nowrap rounded-full bg-ink-100 px-2 py-0.5 text-xs text-ink-700"
                         >
                           {subject.name}
                         </span>
                       ))}
                       {extraSubjects > 0 ? (
-                        <span className="whitespace-nowrap text-xs text-slate-500">
+                        <span className="whitespace-nowrap text-xs text-ink-500">
                           +{extraSubjects} more
                         </span>
                       ) : null}
@@ -137,14 +152,14 @@ export function TutorsTable({ items }: { items: AdminTutorListItem[] }) {
                   )}
                 </td>
 
-                <td className="whitespace-nowrap px-4 py-3 text-slate-700">
+                <td className="whitespace-nowrap px-4 py-3 text-ink-700">
                   {item.teachingMode.replace(/_/g, ' ').toLowerCase()}
                 </td>
-                <td className="px-4 py-3 text-slate-700">{item.location || '—'}</td>
-                <td className="whitespace-nowrap px-4 py-3 text-slate-700">
-                  {formatRate(item.hourlyRate)}
+                <td className="px-4 py-3 text-ink-700">{item.location || '—'}</td>
+                <td className="whitespace-nowrap px-4 py-3 text-ink-700">
+                  {formatRates(item)}
                 </td>
-                <td className="whitespace-nowrap px-4 py-3 text-slate-600">
+                <td className="whitespace-nowrap px-4 py-3 text-ink-600">
                   {formatDate(item.createdAt)}
                 </td>
                 <td className="whitespace-nowrap px-4 py-3">

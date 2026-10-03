@@ -22,6 +22,7 @@ import {
   VERIFICATION_CHECKLIST_KEYS,
   VERIFICATION_STATUSES,
 } from '../src/modules/adminTutors/validation.js'
+import { ratesFor, withoutRates } from './helpers/rates.mjs'
 
 let server
 let baseUrl
@@ -106,10 +107,13 @@ async function createProfile(overrides = {}) {
       bio: 'Ten years of teaching experience.',
       teachingMode: 'ONLINE',
       studentLevels: ['High School'],
-      hourlyRate: 25,
+      // Priced in the local market so a moderator has a number to look at. A rate
+      // row rather than a column: the rate table is what a profile stores.
+      rates: ratesFor({ hourlyRateEtb: 25 }),
       profileStatus: 'PENDING_REVIEW',
       verificationStatus: 'UNVERIFIED',
-      ...overrides,
+      ...withoutRates(overrides),
+      rates: ratesFor(overrides),
       userId: user.id,
       subjects: { create: [{ subjectId }] },
     },

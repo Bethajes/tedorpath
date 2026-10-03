@@ -14,6 +14,7 @@ import fc from 'fast-check'
 import { createApp } from '../src/app.js'
 import { SESSION_COOKIE_NAME } from '../src/modules/auth/cookies.js'
 import { closePrisma, prisma } from '../src/lib/prisma.js'
+import { ratesFor, withoutRates } from './helpers/rates.mjs'
 
 let server
 let baseUrl
@@ -126,7 +127,11 @@ async function seedProfileFor(userId, overrides = {}) {
       teachingMode: 'ONLINE',
       studentLevels: ['High School'],
       profileStatus: 'APPROVED',
-      ...overrides,
+      // Prices are rate rows now, so the rate keys are lifted out of the column
+      // spread and written as rows. Without this the whole insert is rejected,
+      // which fails the property for the wrong reason.
+      ...withoutRates(overrides),
+      rates: ratesFor(overrides),
     },
   })
   createdProfileIds.push(profile.id)
@@ -425,9 +430,9 @@ describe('Property 2: Applied filters are satisfied by every returned profile', 
         fc.integer({ min: 51, max: 150 }),
         async (minRate, maxRate) => {
           // Seed profiles: one in range, one below, one above
-          await seedProfile({ hourlyRate: (minRate + maxRate) / 2, displayName: 'In Range' })
-          await seedProfile({ hourlyRate: minRate - 1, displayName: 'Below Range' })
-          await seedProfile({ hourlyRate: maxRate + 1, displayName: 'Above Range' })
+          await seedProfile({ hourlyRateUsd: (minRate + maxRate) / 2, displayName: 'In Range' })
+          await seedProfile({ hourlyRateUsd: minRate - 1, displayName: 'Below Range' })
+          await seedProfile({ hourlyRateUsd: maxRate + 1, displayName: 'Above Range' })
 
           const { status, body } = await api(`/api/tutors?minRate=${minRate}&maxRate=${maxRate}&limit=100`)
           assert.equal(status, 200)
@@ -525,10 +530,10 @@ describe('Property 3: Pagination envelope is mathematically consistent', () => {
 describe('Property 4: Sorting order invariant', () => {
   before(async () => {
     // Seed a set of profiles with known rates and timestamps for sort testing
-    await seedProfile({ hourlyRate: 20, displayName: 'Sort Tutor Low' })
-    await seedProfile({ hourlyRate: 50, displayName: 'Sort Tutor Mid' })
-    await seedProfile({ hourlyRate: 100, displayName: 'Sort Tutor High' })
-    await seedProfile({ hourlyRate: null, displayName: 'Sort Tutor NoRate' })
+    await seedProfile({ hourlyRateUsd: 20, displayName: 'Sort Tutor Low' })
+    await seedProfile({ hourlyRateUsd: 50, displayName: 'Sort Tutor Mid' })
+    await seedProfile({ hourlyRateUsd: 100, displayName: 'Sort Tutor High' })
+    await seedProfile({ hourlyRateUsd: null, displayName: 'Sort Tutor NoRate' })
   })
 
   it('price_asc: consecutive items are in ascending order (nulls last)', async () => {

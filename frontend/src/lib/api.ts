@@ -80,6 +80,29 @@ export function setAuthTokenProvider(provider: TokenProvider): void {
 
 type Method = 'GET' | 'POST' | 'PATCH' | 'DELETE'
 
+/**
+ * Why a response could not be read as JSON, and what to call it.
+ *
+ * A 5xx is the tell that the request never reached the application: every
+ * application-level failure is answered through the JSON error envelope, so a
+ * status in this range means something in front of the API answered instead. In
+ * development that something is the Vite dev server reporting it could not reach
+ * the backend — which is a very common thing to hit, and "unexpected response"
+ * says nothing about it.
+ *
+ * Anything else is a genuinely malformed response from a server that is up, so it
+ * keeps the plainer wording rather than blaming a process that may be fine.
+ */
+function unparseableResponseMessage(status: number): string {
+  return status >= 500
+    ? 'The API is not responding. Check that the backend is running, and that VITE_DEV_API_TARGET points at it.'
+    : 'The server returned an unexpected response. Please try again.'
+}
+
+function unparseableResponseCode(status: number): string {
+  return status >= 500 ? 'API_UNAVAILABLE' : 'BAD_RESPONSE'
+}
+
 async function requestJson<T>(method: Method, path: string, body?: unknown): Promise<T> {
   const headers: Record<string, string> = {}
   if (body !== undefined) headers['Content-Type'] = 'application/json'
@@ -106,7 +129,11 @@ async function requestJson<T>(method: Method, path: string, body?: unknown): Pro
   try {
     envelope = (await response.json()) as ApiEnvelope
   } catch {
-    throw new ApiError('The server returned an unexpected response.', response.status, 'BAD_RESPONSE')
+    throw new ApiError(
+      unparseableResponseMessage(response.status),
+      response.status,
+      unparseableResponseCode(response.status),
+    )
   }
 
   if (!response.ok || !envelope?.success) {
@@ -192,7 +219,11 @@ export async function postFile<T>(
   try {
     envelope = (await response.json()) as ApiEnvelope
   } catch {
-    throw new ApiError('The server returned an unexpected response.', response.status, 'BAD_RESPONSE')
+    throw new ApiError(
+      unparseableResponseMessage(response.status),
+      response.status,
+      unparseableResponseCode(response.status),
+    )
   }
 
   if (!response.ok || !envelope?.success) {

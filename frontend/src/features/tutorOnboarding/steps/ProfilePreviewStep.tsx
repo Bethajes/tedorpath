@@ -6,6 +6,7 @@
  */
 
 import type { UseFormReturn } from 'react-hook-form'
+import { knownMarkets } from '@/features/tutors/market'
 import { TEACHING_MODE_LABELS } from '@/features/tutors/tutors.types'
 import type {
   OnboardingFormData,
@@ -15,6 +16,7 @@ import type {
 } from '../tutorOnboarding.types'
 import { ONBOARDING_STEPS } from '../tutorOnboarding.types'
 import { resolveImageUrl } from '@/lib/api'
+import { telegramHandle, telegramLink } from '@/lib/contactConfig'
 
 interface ProfilePreviewStepProps {
   form: UseFormReturn<OnboardingFormData>
@@ -58,6 +60,21 @@ export function ProfilePreviewStep({
 
   const levelsList = data.studentLevels.length > 0 ? data.studentLevels.join(', ') : '—'
 
+  /*
+   * The markets to preview a rate for: every market the platform sells in, plus
+   * any market the tutor has already typed a rate for.
+   *
+   * The second half matters for a withdrawn market. The form keeps such a rate —
+   * see the profile hydration — so a preview that listed only the registry would
+   * hide a price the tutor can see, edit and submit one screen later.
+   */
+  const previewMarkets = [
+    ...knownMarkets(),
+    ...Object.keys(data.rates ?? {})
+      .filter((code) => !knownMarkets().some((market) => market.code === code))
+      .map((code) => ({ code, name: code, currencyName: code })),
+  ]
+
   const langsList =
     data.languages.trim().length > 0 ? data.languages : 'English'
 
@@ -96,10 +113,24 @@ export function ProfilePreviewStep({
           <PreviewRow label="Teaching Mode" value={modeLabel} />
           <PreviewRow label="Experience" value={data.experience || '—'} />
           <PreviewRow label="Education" value={data.education || '—'} />
-          <PreviewRow
-            label="Hourly Rate"
-            value={data.hourlyRate ? `£${data.hourlyRate}/hr` : '—'}
-          />
+          {/*
+            One row per market, generated from the market registry, each with the
+            code the tutor's own number is in. The previous version printed a
+            hardcoded `£` in front of a number the API never said was pounds — a
+            currency this product does not use in any market — and listed exactly
+            two markets whether or not the platform sold in them.
+          */}
+          {previewMarkets.map((market) => {
+            const entered = data.rates[market.code]?.trim()
+
+            return (
+              <PreviewRow
+                key={market.code}
+                label={`Hourly rate (${market.code})`}
+                value={entered ? `${entered} ${market.code}/hr` : 'Not offered'}
+              />
+            )
+          })}
           <PreviewRow label="Languages" value={langsList} />
           <PreviewRow label="Availability" value={data.availability || '—'} />
         </dl>
@@ -205,6 +236,52 @@ export function ProfilePreviewStep({
           </div>
         </div>
       )}
+
+      {/*
+        What happens after they press submit, said before they press it.
+
+        Documents are requested *after* submission — the wizard cannot ask for an
+        identity document before the profile exists — so this is the last moment
+        the tutor can be told where those documents will go. Without it they
+        submit, wait, and only discover the address once an admin has asked.
+
+        Hidden entirely when no Telegram handle is configured, so a deployment
+        without one shows no channel that does not work.
+      */}
+      <NextStepsNote />
     </div>
+  )
+}
+
+/**
+ * The "what happens next" note at the end of the wizard.
+ *
+ * Its own component rather than inline, because the document-delivery address
+ * has to be read from the environment at render time and there is no reason to
+ * re-render the whole preview step when that value is absent.
+ */
+function NextStepsNote() {
+  const telegram = telegramLink()
+  const handle = telegramHandle()
+
+  if (!telegram || !handle) return null
+
+  return (
+    <aside className="rounded-xl border border-brand-200 bg-brand-50 px-5 py-4 sm:px-6">
+      <h3 className="text-sm font-semibold text-brand-900">What happens after you submit</h3>
+      <p className="mt-1.5 text-sm text-brand-900">
+        Our team reviews your profile. We will then ask for the documents that verify your
+        qualifications &mdash; and when we do, you can send them straight to us on Telegram at{' '}
+        <a
+          href={telegram}
+          target="_blank"
+          rel="noreferrer noopener"
+          className="font-semibold underline underline-offset-2 hover:text-brand-800"
+        >
+          {handle}
+        </a>
+        .
+      </p>
+    </aside>
   )
 }

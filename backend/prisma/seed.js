@@ -1,17 +1,45 @@
 /**
- * Database seed script — Subject rows and demo tutor profiles.
+ * Database seed script — reference data and demo tutor profiles.
  *
- * Usage:  node prisma/seed.js
+ * Usage:
+ *   node prisma/seed.js                      # development: everything
+ *   node prisma/seed.js --allow-production   # production: reference data only
  *
  * Guards:
  *   - Refuses to run in production (NODE_ENV=production), before touching the
- *     database at all.
+ *     database at all, unless --allow-production is passed.
+ *   - Even with --allow-production, the demo tutors are never created. Only the
+ *     reference data is: the currencies, markets, education systems, subjects,
+ *     countries, levels and learning goals that the request wizard and the tutor
+ *     directory cannot work without.
  *   - Uses upsert so re-running is safe.
+ *
+ * WHY THE FLAG EXISTS
+ *
+ * `migrate deploy` creates the schema and nothing else — only the two `markets`
+ * rows come from a migration. Every other reference table is written here, so a
+ * fresh production database provisioned with migrations alone has an empty country
+ * list, no subjects and no curricula: the wizard renders with nothing to ask and
+ * the directory with nothing to filter.
+ *
+ * The production guard used to be unconditional, which left those two options —
+ * run it and risk demo tutors in a live database, or ship a site with no reference
+ * data at all. This is the middle one: an explicit acknowledgement provisions the
+ * data the application requires, and the demo rows stay unreachable.
  *
  * Requirements: 1.2, 1.3, 13.1, 13.2, 13.3, 13.4
  */
 
 import { toSlug } from '../src/lib/slug.js';
+import {
+  CURRENCIES,
+  COUNTRIES,
+  MARKETS,
+  EDUCATION_LEVELS,
+  EDUCATION_SYSTEMS,
+  EXTRA_SUBJECTS,
+  LEARNING_GOALS,
+} from './onboardingConfigData.js';
 
 // Checked before the client is even constructed: a production run must not
 // reach the database, not merely decide not to write to it.
@@ -21,10 +49,32 @@ import { toSlug } from '../src/lib/slug.js';
 // deployment. Deliberately broader than env.isProduction, which is not
 // destructive.
 const NODE_ENV = (process.env.NODE_ENV ?? '').trim().toLowerCase();
-if (NODE_ENV === 'production') {
-  console.warn('⚠️  Seed script refused: NODE_ENV=production. Exiting without creating any records.');
+
+/**
+ * The explicit acknowledgement that unlocks reference data in production.
+ *
+ * Read from argv rather than an environment variable, because it is a decision
+ * about this one run and not a property of the deployment: a box that has it set
+ * would quietly provision itself on every restart.
+ */
+const ALLOW_PRODUCTION = process.argv.slice(2).includes('--allow-production');
+
+if (NODE_ENV === 'production' && !ALLOW_PRODUCTION) {
+  console.warn(
+    '⚠️  Seed script refused: NODE_ENV=production. Exiting without creating any records.\n' +
+      '    A fresh production database needs its reference data (currencies, markets,\n' +
+      '    education systems, subjects, countries, levels, learning goals) or the wizard\n' +
+      '    and the directory have nothing to show. Run it once, deliberately:\n' +
+      '\n' +
+      '      NODE_ENV=production node prisma/seed.js --allow-production\n' +
+      '\n' +
+      '    That creates the reference data only — never the demo tutors.',
+  );
   process.exit(0);
 }
+
+/** Demo tutors are development fixtures and are never written to production. */
+const SEED_DEMO_TUTORS = NODE_ENV !== 'production';
 
 // The shared client, not a bare `new PrismaClient()`: Prisma 7 connects through
 // a driver adapter, so constructing one directly throws. Importing this also
@@ -46,6 +96,10 @@ const SUBJECT_SEEDS = [
   { name: 'University Course',  category: 'University & Exams',    description: 'Undergraduate and postgraduate coursework support.' },
   { name: 'Exam Preparation',   category: 'University & Exams',    description: 'IELTS, SAT, HSC, A-Levels and other high-stakes exams.' },
   { name: 'Other',              category: 'Other',                 description: 'Any subject not listed above.' },
+  // Additions for the adaptive wizard. Appended rather than merged in, so the
+  // ten above stay in the order the homepage catalogue and the legacy request
+  // enum expect. See onboardingConfigData.js.
+  ...EXTRA_SUBJECTS,
 ];
 
 /**
@@ -72,7 +126,11 @@ const DEMO_TUTORS = [
     teachingMode: 'ONLINE',
     studentLevels: ['High School', 'University'],
     languages: ['English', 'Amharic'],
-    hourlyRate: 25,
+    // A rate per market, not one rate in two currencies. Demo Tutor 1 teaches
+    // online from Addis Ababa and also takes international students, so both are
+    // stated. There is no exchange rate anywhere in this codebase, so these two
+    // numbers are simply what this tutor charges in each market.
+    rates: { ETB: 900, USD: 12 },
     availability: 'Weekday evenings and Saturday mornings.',
     experience: 'Demo data: 8 years of classroom teaching.',
     education: 'Demo data: BSc in Mathematics.',
@@ -89,7 +147,7 @@ const DEMO_TUTORS = [
     teachingMode: 'BOTH',
     studentLevels: ['University', 'Adult Learning'],
     languages: ['English'],
-    hourlyRate: 40,
+    rates: { ETB: 1500, USD: 20 },
     availability: 'Flexible; weekends preferred.',
     experience: 'Demo data: software engineer with a side tutoring practice.',
     education: 'Demo data: MSc in Computer Science.',
@@ -106,7 +164,9 @@ const DEMO_TUTORS = [
     teachingMode: 'IN_PERSON',
     studentLevels: ['Primary School', 'High School'],
     languages: ['English', 'Amharic', 'Afaan Oromo'],
-    hourlyRate: 15,
+    // Local market only, which is the point of having two columns: a tutor who
+    // teaches in person in Addis has no international rate to quote.
+    rates: { ETB: 500 },
     availability: 'Monday to Thursday, afternoons.',
     experience: 'Demo data: 5 years teaching ESL and exam prep.',
     education: 'Demo data: BA in English Literature.',
@@ -133,6 +193,196 @@ async function seedSubjects() {
   return bySlug;
 }
 
+/**
+ * Currencies.
+ *
+ * Upserted on the ISO code, which is the primary key. `sortOrder` follows the
+ * array order, which is "the ones Tedor Tutors prices in first, then
+ * everything else alphabetically-ish" — an editorial choice, not a fact about
+ * money, so it lives in the seed rather than in code.
+ */
+async function seedCurrencies() {
+  console.log('💱  Seeding currencies…');
+
+  for (const [index, currency] of CURRENCIES.entries()) {
+    await prisma.currency.upsert({
+      where: { code: currency.code },
+      update: {
+        name: currency.name,
+        symbol: currency.symbol,
+        decimals: currency.decimals,
+        sortOrder: index,
+      },
+      create: { ...currency, sortOrder: index },
+    });
+  }
+
+  console.log(`   ✓ ${CURRENCIES.length} currencies`);
+}
+
+/**
+ * Education systems.
+ *
+ * Upserted on code. `isDefault` is forced off for every non-default system on
+ * each run so re-seeding cannot leave two systems both claiming to be the
+ * fallback for a country that has no configuration of its own.
+ */
+async function seedEducationSystems() {
+  console.log('🎓  Seeding education systems…');
+
+  const byCode = new Map();
+  for (const system of EDUCATION_SYSTEMS) {
+    const row = await prisma.educationSystem.upsert({
+      where: { code: system.code },
+      update: {
+        name: system.name,
+        description: system.description,
+        isDefault: system.isDefault,
+      },
+      create: system,
+    });
+    byCode.set(system.code, row);
+  }
+
+  // Exactly one default. Clearing the column on everything else first means this
+  // converges no matter what order rows were inserted in previously.
+  const defaultCodes = EDUCATION_SYSTEMS.filter((system) => system.isDefault).map((s) => s.code);
+  await prisma.educationSystem.updateMany({
+    where: { code: { notIn: defaultCodes } },
+    data: { isDefault: false },
+  });
+
+  console.log(`   ✓ ${EDUCATION_SYSTEMS.length} education systems`);
+}
+
+/**
+ * Countries.
+ *
+ * The default education system is applied here rather than being stored per
+ * country, so adding a country to the array is the whole job: it inherits the
+ * generic international levels until someone decides it needs its own.
+ */
+async function seedCountries(systemIdsByCode) {
+  console.log('🌍  Seeding countries…');
+
+  const defaultSystem = EDUCATION_SYSTEMS.find((system) => system.isDefault) ?? EDUCATION_SYSTEMS[0];
+  const fallbackSystemId = systemIdsByCode.get(defaultSystem.code);
+  if (!fallbackSystemId) {
+    throw new Error(`Default education system "${defaultSystem.code}" was not seeded.`);
+  }
+
+  for (const [index, country] of COUNTRIES.entries()) {
+    // Unknown system code in the data file is a mistake worth failing on rather
+    // than a country that silently gets the wrong curriculum at runtime.
+    const educationSystemId = country.educationSystemCode
+      ? systemIdsByCode.get(country.educationSystemCode)
+      : undefined;
+    if (country.educationSystemCode && !educationSystemId) {
+      throw new Error(
+        `Country ${country.code} references unknown education system "${country.educationSystemCode}".`,
+      );
+    }
+
+    const data = {
+      name: country.name,
+      currencyCode: country.currencyCode,
+      timezone: country.timezone,
+      educationSystemId: educationSystemId ?? fallbackSystemId,
+      sortOrder: index,
+    };
+
+    await prisma.country.upsert({ where: { code: country.code }, update: data, create: { code: country.code, ...data } });
+  }
+
+  console.log(`   ✓ ${COUNTRIES.length} countries`);
+}
+
+/**
+ * Education levels and the subjects suggested for each.
+ *
+ * The join rows are replaced wholesale rather than upserted: the suggestion set
+ * is authored as a whole, so removing a subject from the data file has to
+ * actually remove it rather than leave a stale suggestion behind.
+ */
+async function seedEducationLevels(systemIdsByCode, subjectsByName) {
+  console.log('📚  Seeding education levels…');
+
+  const levelsByCode = new Map();
+  const bySystem = new Map();
+  EDUCATION_LEVELS.forEach((level, index) => {
+    if (!bySystem.has(level.system)) bySystem.set(level.system, []);
+    bySystem.get(level.system).push({ level, index });
+  });
+
+  for (const [systemCode, entries] of bySystem) {
+    const educationSystemId = systemIdsByCode.get(systemCode);
+    if (!educationSystemId) {
+      throw new Error(`Education level references unknown education system "${systemCode}".`);
+    }
+
+    // Ordering is per system, so each system's list starts again at 0 rather
+    // than continuing the global index.
+    for (const [position, { level, index }] of entries.entries()) {
+      const data = {
+        name: level.name,
+        stage: level.stage,
+        aliases: level.aliases ?? [],
+        sortOrder: position,
+        educationSystemId,
+      };
+
+      const row = await prisma.educationLevel.upsert({
+        where: { code: level.code },
+        update: data,
+        create: { code: level.code, ...data },
+      });
+      levelsByCode.set(level.code, row);
+
+      const subjectIds = [];
+      for (const subjectName of level.subjects) {
+        const subject = subjectsByName.get(subjectName);
+        if (!subject) {
+          throw new Error(
+            `Education level "${level.code}" (seed index ${index}) references unknown subject "${subjectName}".`,
+          );
+        }
+        subjectIds.push(subject.id);
+      }
+
+      await prisma.educationLevelSubject.deleteMany({
+        where: { educationLevelId: row.id },
+      });
+      if (subjectIds.length > 0) {
+        await prisma.educationLevelSubject.createMany({
+          data: subjectIds.map((subjectId) => ({ educationLevelId: row.id, subjectId })),
+          skipDuplicates: true,
+        });
+      }
+    }
+  }
+
+  console.log(`   ✓ ${EDUCATION_LEVELS.length} education levels`);
+}
+
+async function seedLearningGoals() {
+  console.log('🎯  Seeding learning goals…');
+
+  for (const [index, goal] of LEARNING_GOALS.entries()) {
+    const data = {
+      name: goal.name,
+      description: goal.description,
+      sortOrder: index,
+    };
+    await prisma.learningGoal.upsert({
+      where: { code: goal.code },
+      update: data,
+      create: { code: goal.code, ...data },
+    });
+  }
+
+  console.log(`   ✓ ${LEARNING_GOALS.length} learning goals`);
+}
+
 async function seedDemoTutors(subjectsByName) {
   console.log('👤  Seeding demo tutor profiles…');
 
@@ -152,8 +402,9 @@ async function seedDemoTutors(subjectsByName) {
     });
 
     const {
-      // Not a profile column: it is resolved into the join rows below.
+      // Not a profile column: both are resolved into join rows below.
       subjects: _subjectNames,
+      rates: _rates,
       // The user is linked by id, not stored on the profile.
       email: _email,
       name: _name,
@@ -177,13 +428,92 @@ async function seedDemoTutors(subjectsByName) {
       });
     }
 
-    console.log(`   ✓ ${demo.displayName} <${demo.email}> — ${demo.subjects.join(', ')}`);
+    await seedDemoRates(profile.id, _rates)
+
+    const rates = Object.entries(_rates)
+      .map(([code, amount]) => `${amount} ${code}`)
+      .join(' · ')
+    console.log(`   ✓ ${demo.displayName} <${demo.email}> — ${demo.subjects.join(', ')}${rates ? ` — ${rates}` : ''}`);
   }
 }
 
+/**
+ * The markets tutors price in.
+ *
+ * Idempotent and additive: an upsert per row, and rows the operator added that
+ * this file does not know about are left alone. Re-seeding must never narrow a
+ * deployment's markets back to the two this file happens to list.
+ */
+async function seedMarkets() {
+  console.log('💱  Seeding markets…');
+
+  for (const market of MARKETS) {
+    await prisma.market.upsert({
+      where: { code: market.code },
+      update: {
+        name: market.name,
+        currencyName: market.currencyName,
+        symbol: market.symbol,
+        decimals: market.decimals,
+        isDefault: market.isDefault,
+        sortOrder: market.sortOrder,
+      },
+      create: market,
+    });
+  }
+
+  // Exactly one default, converged rather than assumed: clear the flag everywhere
+  // this file does not claim, so a re-run cannot leave two defaults fighting.
+  const claimed = MARKETS.filter((market) => market.isDefault).map((market) => market.code)
+  await prisma.market.updateMany({
+    where: { code: { notIn: claimed } },
+    data: { isDefault: false },
+  });
+
+  console.log(`   ✓ ${MARKETS.length} markets`);
+}
+
+/**
+ * Replaces a demo tutor's rate rows with the ones the seed declares.
+ *
+ * Wholesale rather than an upsert, because the declared set is authoritative for
+ * these rows: dropping `USD` from a demo tutor has to actually remove it rather
+ * than leave a stale price behind.
+ */
+async function seedDemoRates(profileId, rates) {
+  await prisma.tutorProfileRate.deleteMany({ where: { tutorProfileId: profileId } })
+
+  const rows = Object.entries(rates)
+    .filter(([, amount]) => typeof amount === 'number' && amount > 0)
+    .map(([marketCode, amount]) => ({ tutorProfileId: profileId, marketCode, amount }))
+
+  if (rows.length > 0) await prisma.tutorProfileRate.createMany({ data: rows })
+}
+
 async function main() {
+  // Order matters: every foreign key below is created by the call above it.
+  await seedCurrencies();
+  // Markets reference `currencies` by code, so they follow it.
+  await seedMarkets();
+  await seedEducationSystems();
+
   const subjectsByName = await seedSubjects();
-  await seedDemoTutors(subjectsByName);
+
+  const systems = await prisma.educationSystem.findMany({
+    select: { id: true, code: true },
+  });
+  const systemIdsByCode = new Map(systems.map((system) => [system.code, system.id]));
+
+  await seedCountries(systemIdsByCode);
+  await seedEducationLevels(systemIdsByCode, subjectsByName);
+  await seedLearningGoals();
+
+  if (SEED_DEMO_TUTORS) {
+    await seedDemoTutors(subjectsByName);
+  } else {
+    console.log('ℹ️  Reference data seeded. Demo tutors skipped: not a development environment.');
+  }
+
   console.log('✅  Seeding complete.');
 }
 

@@ -24,7 +24,14 @@ const LIST_COLUMNS = {
   location: true,
   teachingMode: true,
   studentLevels: true,
-  hourlyRate: true,
+  // Every market the tutor priced. A moderator approving a profile needs to see
+  // that an international rate exists at all, not just the one their own screen
+  // defaults to, and the rates are never compared against each other.
+  //
+  // Unfiltered, deliberately: a tutor who prices in a market not currently active
+  // still has that rate shown to a moderator, because "this tutor is not visible
+  // to buyers in X" is a moderation fact rather than a display detail.
+  rates: { select: { marketCode: true, amount: true } },
   profileStatus: true,
   verificationStatus: true,
   createdAt: true,

@@ -12,6 +12,15 @@ interface NavItem {
   /** Anchor targets live on another page; they should not render as "current". */
   anchor?: boolean
   /**
+   * Renders in the orange accent, marking this as the primary action.
+   *
+   * A property of the item rather than a separate link, because a second link to
+   * the same place is a duplicate no matter how it is styled. The accent lives on
+   * the nav item itself and is applied in both the desktop bar and the mobile
+   * panel, so the two cannot drift apart.
+   */
+  accent?: boolean
+  /**
    * Stable identity for the list. Defaults to `to`, which is only safe while
    * every entry points somewhere different. Labels are unique, so they are used
    * as the key instead.
@@ -24,11 +33,61 @@ interface NavItem {
  * never disagree about what navigation exists (Requirement 1.3).
  */
 const NAV_ITEMS: NavItem[] = [
-  { to: '/tutors', label: 'Find a Tutor', key: 'find-a-tutor' },
+  { to: '/tutors', label: 'Find a Tutor', key: 'find-a-tutor', accent: true },
   { to: '/how-it-works', label: 'How It Works', key: 'how-it-works' },
   { to: '/become-a-tutor', label: 'Become a Tutor', key: 'become-a-tutor' },
   { to: '/about', label: 'About', key: 'about' },
 ]
+
+/**
+ * The classes for one nav link, in the desktop bar.
+ *
+ * `isCurrent` changes the treatment for every item, including the accented one.
+ * An accent link that lost its accent the moment you followed it would read as a
+ * different control, so the current state is a deeper shade plus a ring rather
+ * than the neutral grey the other items use.
+ */
+function desktopLinkClass(item: NavItem, isCurrent: boolean): string {
+  const base =
+    'rounded-md px-3.5 py-2 text-[0.95rem] font-medium transition-colors'
+
+  if (item.accent) {
+    return cn(
+      base,
+      isCurrent
+        ? 'bg-accent-600 text-white ring-2 ring-accent-400'
+        : 'bg-accent-500 text-white hover:bg-accent-600',
+    )
+  }
+
+  return cn(
+    base,
+    isCurrent
+      ? 'bg-ink-800 text-white'
+      : 'text-ink-300 hover:bg-ink-800 hover:text-white',
+  )
+}
+
+/** The same decision, sized for the mobile panel. See `desktopLinkClass`. */
+function mobileLinkClass(item: NavItem, isCurrent: boolean): string {
+  const base = 'block rounded-md px-3 py-3 text-base font-medium transition-colors'
+
+  if (item.accent) {
+    return cn(
+      base,
+      isCurrent
+        ? 'bg-accent-600 text-white ring-2 ring-accent-400'
+        : 'bg-accent-500 text-white hover:bg-accent-600',
+    )
+  }
+
+  return cn(
+    base,
+    isCurrent
+      ? 'bg-ink-800 text-white'
+      : 'text-ink-200 hover:bg-ink-800 hover:text-white',
+  )
+}
 
 export function Navbar() {
   const [open, setOpen] = useState(false)
@@ -97,23 +156,25 @@ export function Navbar() {
                 key={item.key ?? item.to}
                 to={item.to}
                 aria-current={isCurrent(item) ? 'page' : undefined}
-                className={cn(
-                  'rounded-md px-3.5 py-2 text-[0.95rem] font-medium transition-colors',
-                  isCurrent(item)
-                    ? 'bg-ink-800 text-white'
-                    : 'text-ink-300 hover:bg-ink-800 hover:text-white',
-                )}
+                className={desktopLinkClass(item, isCurrent(item))}
               >
                 {item.label}
               </Link>
             ))}
 
-            <Link
-              to="/tutors"
-              className="ml-3 inline-flex items-center rounded-md bg-accent-500 px-5 py-2.5 text-[0.95rem] font-semibold text-white transition-colors hover:bg-accent-600"
-            >
-              Find a Tutor
-            </Link>
+            {/*
+              No separate "Find a Tutor" call-to-action here.
+
+              There used to be one: an accent-coloured button beside these links,
+              pointing at the same /tutors as the first entry in NAV_ITEMS. Two
+              identical destinations in one bar read as a mistake, and the button
+              was the worse of the two — it carried no active state, so it stayed
+              unhighlighted on the directory page while the real nav item lit up.
+
+              The directory is the primary action, and it is already the first
+              thing in the list. If it needs more prominence later, give the nav
+              item itself a style rather than adding a second link to it.
+            */}
 
             {user ? (
               <div className="ml-2">
@@ -183,26 +244,17 @@ export function Navbar() {
                   to={item.to}
                   onClick={closeMenu}
                   aria-current={isCurrent(item) ? 'page' : undefined}
-                  className={cn(
-                    'block rounded-md px-3 py-3 text-base font-medium transition-colors',
-                    isCurrent(item)
-                      ? 'bg-ink-800 text-white'
-                      : 'text-ink-200 hover:bg-ink-800 hover:text-white',
-                  )}
+                  className={mobileLinkClass(item, isCurrent(item))}
                 >
                   {item.label}
                 </Link>
               </li>
             ))}
-            <li className="mt-2 border-t border-ink-800 pt-4">
-              <Link
-                to="/tutors"
-                onClick={closeMenu}
-                className="block rounded-md bg-accent-500 px-4 py-3.5 text-center text-base font-semibold text-white transition-colors hover:bg-accent-600"
-              >
-                Find a Tutor
-              </Link>
-            </li>
+            {/*
+              Same decision as the desktop bar: no duplicate accent button. The
+              mobile panel lists NAV_ITEMS, which already contains
+              "Find a Tutor", and this used to add a second copy of it below.
+            */}
             {user ? (
               <li className="flex items-center justify-between gap-3 rounded-md bg-ink-800 px-3 py-3">
                 <span className="min-w-0">

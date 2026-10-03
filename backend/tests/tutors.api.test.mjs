@@ -10,6 +10,8 @@ import { after, before, describe, it } from 'node:test'
 
 import { createApp } from '../src/app.js'
 import { closePrisma, prisma } from '../src/lib/prisma.js'
+import { ratesFor } from './helpers/rates.mjs'
+
 
 let server
 let baseUrl
@@ -69,7 +71,9 @@ async function seedProfile(overrides = {}) {
       // distinct universities, and leaving this to the column default would
       // make a stats test depend on the schema rather than on its own rows.
       education: overrides.education ?? null,
-      hourlyRate: overrides.hourlyRate ?? null,
+      // Priced as rate rows, because USD is the directory's default market and
+      // most of this file's filter and sort cases are about that one.
+      rates: ratesFor(overrides),
       // Explicit rather than left to the column default, so a test that does
       // not care about languages gets an empty list rather than "English" and
       // a language-filter test does not accidentally match everything.
@@ -433,8 +437,8 @@ describe('GET /api/tutors — language filter — Req 30.2, 30.4', () => {
 
 describe('GET /api/tutors — rate filters — Req 4.7', () => {
   it('minRate excludes profiles below the threshold', async () => {
-    await seedProfile({ hourlyRate: 10, displayName: 'Cheap Tutor' })
-    await seedProfile({ hourlyRate: 80, displayName: 'Expensive Tutor' })
+    await seedProfile({ hourlyRateUsd: 10, displayName: 'Cheap Tutor' })
+    await seedProfile({ hourlyRateUsd: 80, displayName: 'Expensive Tutor' })
 
     const { body } = await api('/api/tutors?minRate=50&limit=100')
     for (const item of body.data.items) {
@@ -445,8 +449,8 @@ describe('GET /api/tutors — rate filters — Req 4.7', () => {
   })
 
   it('maxRate excludes profiles above the threshold', async () => {
-    await seedProfile({ hourlyRate: 200, displayName: 'Very Expensive Tutor' })
-    await seedProfile({ hourlyRate: 30, displayName: 'Affordable Tutor' })
+    await seedProfile({ hourlyRateUsd: 200, displayName: 'Very Expensive Tutor' })
+    await seedProfile({ hourlyRateUsd: 30, displayName: 'Affordable Tutor' })
 
     const { body } = await api('/api/tutors?maxRate=100&limit=100')
     for (const item of body.data.items) {

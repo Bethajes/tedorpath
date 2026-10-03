@@ -27,7 +27,7 @@ const STATUS_STYLES: Record<AdminStatus, { label: string; className: string }> =
   },
   CANCELLED: {
     label: 'CANCELLED',
-    className: 'border-slate-300 bg-slate-100 text-slate-700',
+    className: 'border-ink-300 bg-ink-100 text-ink-700',
   },
 }
 

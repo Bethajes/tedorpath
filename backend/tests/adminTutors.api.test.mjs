@@ -16,6 +16,7 @@ import express from 'express'
 import { createApp } from '../src/app.js'
 import { adminTutorsRouter } from '../src/modules/adminTutors/index.js'
 import { closePrisma, prisma } from '../src/lib/prisma.js'
+import { ratesFor, withoutRates } from './helpers/rates.mjs'
 
 /**
  * Requirements covered: 7.1, 7.2, 7.3, 7.4, 7.5
@@ -112,10 +113,13 @@ async function createProfile(overrides = {}) {
       bio: 'Ten years of teaching experience.',
       teachingMode: 'ONLINE',
       studentLevels: ['High School'],
-      hourlyRate: 25,
+      // Priced in the local market so a moderator has a number to look at. A rate
+      // row rather than a column: the rate table is what a profile stores.
+      rates: ratesFor({ hourlyRateEtb: 25 }),
       profileStatus: 'PENDING_REVIEW',
       verificationStatus: 'UNVERIFIED',
-      ...overrides,
+      ...withoutRates(overrides),
+      rates: ratesFor(overrides),
       userId: user.id,
       subjects: { create: [{ subjectId }] },
     },

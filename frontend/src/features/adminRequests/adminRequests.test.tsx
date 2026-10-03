@@ -45,6 +45,7 @@ const listItem = (overrides: Record<string, unknown> = {}) => ({
   educationLevel: 'University',
   learningMode: 'Online',
   status: 'NEW',
+  countryCode: 'ET',
   // Recent enough that the relative time renders as "N days ago" rather than
   // falling back to the absolute date.
   createdAt: '2026-09-29T10:00:00.000Z',
@@ -60,10 +61,21 @@ const detailRecord = (overrides: Record<string, unknown> = {}) => ({
   location: 'Downtown',
   preferredDays: 'Monday',
   preferredTime: 'Evening',
-  budget: '$20 per hour',
+  budget: '20 USD',
   additionalInfo: null,
   adminNotes: null,
   updatedAt: '2026-09-27T10:05:00.000Z',
+  // What the request wizard collects beyond the original form's fields.
+  timezone: 'Africa/Addis_Ababa',
+  educationLevelCode: 'eth-university',
+  subjects: ['Mathematics'],
+  subjectOther: null,
+  learningGoal: 'exam-preparation',
+  learningGoalOther: null,
+  preferredDayNames: ['Monday'],
+  preferredTimeRanges: ['18:00-20:00'],
+  budgetAmount: 20,
+  budgetCurrency: 'USD',
   ...overrides,
 })
 
@@ -86,11 +98,54 @@ function defaultStats(overrides: Record<string, unknown> = {}) {
   }
 }
 
+/**
+ * The dashboard overview envelope.
+ *
+ * This is what `GET /api/admin/dashboard` answers, which is where the dashboard
+ * gets its numbers from. Every group is present in the default because the page
+ * reads all of them — a response missing `matching` or `trends` would render an
+ * error rather than an empty section, so a partial fixture would test a shape the
+ * server never sends.
+ */
+function defaultOverview(overrides: Record<string, unknown> = {}) {
+  const days = Array.from({ length: 30 }, (_, index) => ({
+    date: `2026-09-${String(index + 3).padStart(2, '0')}`,
+    count: index === 26 ? 1 : 0,
+  }))
+
+  return {
+    requests: { total: 3, NEW: 1, CONTACTED: 1, IN_PROGRESS: 1, COMPLETED: 0, CANCELLED: 0 },
+    applications: {
+      total: 2,
+      PENDING_REVIEW: 1,
+      NEEDS_INFORMATION: 0,
+      APPROVED: 1,
+      SUSPENDED: 0,
+      REJECTED: 0,
+      DRAFT: 0,
+    },
+    verification: {
+      VERIFIED: 0,
+      DOCUMENTS_REQUESTED: 0,
+      DOCUMENTS_RECEIVED: 0,
+      NEEDS_MORE_INFORMATION: 0,
+      UNVERIFIED: 2,
+    },
+    learners: { registered: 7, requestedRecently: 2, windowDays: 30 },
+    matching: { total: 3, matched: 1, unmatched: 2, stale: 0, staleDays: 7 },
+    subjects: [{ subject: 'Mathematics', count: 3 }],
+    trends: { days: 30, from: '2026-09-03', to: '2026-10-02', requests: days, applications: days },
+    activity: [],
+    ...overrides,
+  }
+}
+
 let fetchMock: ReturnType<typeof vi.fn>
 
 /** Routes a URL to a handler, so each test only declares what it cares about. */
 function stubApi(routes: {
   stats?: () => Promise<Response> | Response
+  overview?: () => Promise<Response> | Response
   list?: (url: URL) => Promise<Response> | Response
   detail?: () => Promise<Response> | Response
   patch?: (body: Record<string, unknown>) => Promise<Response> | Response
@@ -104,6 +159,12 @@ function stubApi(routes: {
       return routes.stats
         ? routes.stats()
         : jsonResponse({ success: true, data: defaultStats() })
+    }
+
+    if (url.pathname === '/api/admin/dashboard') {
+      return routes.overview
+        ? routes.overview()
+        : jsonResponse({ success: true, data: defaultOverview() })
     }
 
     if (url.pathname === '/api/admin/tutor-requests' && method === 'GET') {
@@ -154,33 +215,33 @@ describe('AdminDashboardPage', () => {
     stubApi({})
     renderAt(<AdminDashboardPage />, '/admin')
 
-    expect(screen.getByText('Loading dashboard…')).toBeInTheDocument()
+    // The placeholder is a set of skeleton cards rather than a spinner, so the
+    // page does not jump when the numbers arrive.
+    expect(screen.getByRole('status', { name: 'Loading dashboard' })).toBeInTheDocument()
 
-    await waitFor(() => expect(screen.getByText('Total Requests')).toBeInTheDocument())
-    expect(screen.getByText('Contacted')).toBeInTheDocument()
-    expect(screen.getByText('In Progress')).toBeInTheDocument()
-    expect(screen.getByText('Completed')).toBeInTheDocument()
+    await waitFor(() => expect(screen.getAllByText('Learner requests').length).toBeGreaterThan(0))
 
-    // Values must come from the API, not be hardcoded.
-    const totalCard = screen.getByText('Total Requests').closest('li')!
-    expect(within(totalCard).getByText('3')).toBeInTheDocument()
+    // Every KPI label the dashboard promises.
+    for (const label of [
+      'Learner requests',
+      'Tutor applications',
+      'Approved tutors',
+      'Pending reviews',
+      'Learner accounts',
+    ]) {
+      expect(screen.getAllByText(label).length).toBeGreaterThan(0)
+    }
+
+    // Values must come from the API, not be hardcoded. Scoped to the KPI list
+    // because the sidebar carries a nav link with the same label.
+    const figures = within(screen.getByRole('list', { name: 'Key figures' }))
+    const card = figures.getByText('Learner requests').closest('a')!
+    expect(within(card).getByText('3')).toBeInTheDocument()
   })
 
   it('shows an empty state when there are no requests', async () => {
     stubApi({
-      stats: () =>
-        jsonResponse({
-          success: true,
-          data: defaultStats({
-            total: 0,
-            NEW: 0,
-            CONTACTED: 0,
-            IN_PROGRESS: 0,
-            COMPLETED: 0,
-            CANCELLED: 0,
-            tutorApplications: { total: 0, PENDING_REVIEW: 0, NEEDS_INFORMATION: 0, APPROVED: 0 },
-          }),
-        }),
+      overview: () => jsonResponse({ success: true, data: defaultOverview() }),
       list: () =>
         jsonResponse({
           success: true,
@@ -194,7 +255,7 @@ describe('AdminDashboardPage', () => {
 
   it('shows an error state with a retry when loading fails', async () => {
     stubApi({
-      stats: () => jsonResponse({ success: false, error: { code: 'X', message: 'boom' } }, 500),
+      overview: () => jsonResponse({ success: false, error: { code: 'X', message: 'boom' } }, 500),
       list: () => jsonResponse({ success: false, error: { code: 'X', message: 'boom' } }, 500),
     })
     renderAt(<AdminDashboardPage />, '/admin')
@@ -233,17 +294,17 @@ describe('AdminDashboardPage', () => {
   })
 
   it('tells the admin how many learner requests are waiting for a first reply', async () => {
-    // The whole point of the change: "someone sent a request" has to be
+    // The whole point of the attention panel: "someone sent a request" has to be
     // answerable without reading the whole feed.
     stubApi({})
     renderAt(<AdminDashboardPage />, '/admin')
 
-    const section = (await screen.findByRole('heading', { name: 'Learner requests' })).closest(
+    const section = (await screen.findByRole('heading', { name: /needs attention/i })).closest(
       'section',
     )!
-    expect(within(section).getByText('1 waiting for a first reply')).toBeInTheDocument()
+    expect(within(section).getByText('waiting for a first reply')).toBeInTheDocument()
     expect(
-      within(section).getByRole('link', { name: /see all new requests/i }),
+      within(section).getByRole('link', { name: /see new requests/i }),
     ).toHaveAttribute('href', '/admin/requests?status=NEW')
   })
 
@@ -275,9 +336,12 @@ describe('AdminDashboardPage', () => {
     stubApi({})
     renderAt(<AdminDashboardPage />, '/admin')
 
-    expect(await screen.findByRole('heading', { name: 'Learner requests' })).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: 'Tutor applications' })).toBeInTheDocument()
-    expect(screen.getByText('1 waiting for review')).toBeInTheDocument()
+    const section = (await screen.findByRole('heading', { name: /needs attention/i })).closest(
+      'section',
+    )!
+    expect(within(section).getByText('New requests')).toBeInTheDocument()
+    expect(within(section).getByText('Applications to review')).toBeInTheDocument()
+    expect(within(section).getByText('waiting for a moderation decision')).toBeInTheDocument()
   })
 
   it('links the tutor queue straight to the pending-review slice', async () => {
@@ -288,14 +352,26 @@ describe('AdminDashboardPage', () => {
     expect(link).toHaveAttribute('href', '/admin/tutors?status=PENDING_REVIEW')
   })
 
-  it('says nothing is waiting when both queues are clear', async () => {
+  it('says every queue is clear when there is nothing waiting', async () => {
+    // Each panel states its own clear condition, rather than one banner covering
+    // all four — an admin needs to know a queue is empty, not that a summary of
+    // four queues is.
     stubApi({
-      stats: () =>
+      overview: () =>
         jsonResponse({
           success: true,
-          data: defaultStats({
-            NEW: 0,
-            tutorApplications: { total: 1, PENDING_REVIEW: 0, NEEDS_INFORMATION: 0, APPROVED: 1 },
+          data: defaultOverview({
+            requests: { total: 1, NEW: 0, CONTACTED: 0, IN_PROGRESS: 0, COMPLETED: 1, CANCELLED: 0 },
+            applications: {
+              total: 1,
+              PENDING_REVIEW: 0,
+              NEEDS_INFORMATION: 0,
+              APPROVED: 1,
+              SUSPENDED: 0,
+              REJECTED: 0,
+              DRAFT: 0,
+            },
+            matching: { total: 1, matched: 1, unmatched: 0, stale: 0, staleDays: 7 },
           }),
         }),
       list: () =>
@@ -306,37 +382,96 @@ describe('AdminDashboardPage', () => {
     })
     renderAt(<AdminDashboardPage />, '/admin')
 
-    expect(await screen.findByText('Nothing is waiting for you right now.')).toBeInTheDocument()
+    expect(await screen.findByText('Every learner request has had a reply')).toBeInTheDocument()
+    expect(screen.getByText('No applications are waiting for review')).toBeInTheDocument()
+    expect(screen.getByText('Nobody is waiting on documents')).toBeInTheDocument()
+    expect(
+      screen.getByText('Nothing has been waiting over 7 days'),
+    ).toBeInTheDocument()
   })
 
   it('flags tutors who are waiting on documents the admin asked for', async () => {
     // NEEDS_INFORMATION means the admin is the blocker, so it belongs on a
     // dashboard that is asking what is waiting.
     stubApi({
-      stats: () =>
+      overview: () =>
         jsonResponse({
           success: true,
-          data: defaultStats({
-            tutorApplications: { total: 3, PENDING_REVIEW: 0, NEEDS_INFORMATION: 2, APPROVED: 1 },
+          data: defaultOverview({
+            applications: {
+              total: 3,
+              PENDING_REVIEW: 0,
+              NEEDS_INFORMATION: 2,
+              APPROVED: 1,
+              SUSPENDED: 0,
+              REJECTED: 0,
+              DRAFT: 0,
+            },
           }),
         }),
     })
     renderAt(<AdminDashboardPage />, '/admin')
 
-    expect(await screen.findByText(/2 tutors are waiting on documents/)).toBeInTheDocument()
+    const section = (await screen.findByRole('heading', { name: /needs attention/i })).closest(
+      'section',
+    )!
+    expect(within(section).getByText('tutors waiting on paperwork you asked for')).toBeInTheDocument()
+    expect(within(section).getByRole('link', { name: /chase documents/i })).toHaveAttribute(
+      'href',
+      '/admin/tutors?status=NEEDS_INFORMATION',
+    )
   })
 
-  it('links each status count into the matching queue filter', async () => {
+  it('states the follow-up rule rather than asserting a conclusion', async () => {
+    // The stale count is derived from createdAt on the server; the threshold is
+    // echoed back so the screen can print the rule rather than a bare number.
+    stubApi({
+      overview: () =>
+        jsonResponse({
+          success: true,
+          data: defaultOverview({
+            matching: { total: 3, matched: 1, unmatched: 2, stale: 4, staleDays: 3 },
+          }),
+        }),
+    })
+    renderAt(<AdminDashboardPage />, '/admin')
+
+    expect(await screen.findByText('new for over 3 days with no reply')).toBeInTheDocument()
+  })
+
+  it('links every KPI card into the queue its number describes', async () => {
     // A number an admin cannot act on is decoration; every card is a shortcut
     // to the rows behind it.
     stubApi({})
     renderAt(<AdminDashboardPage />, '/admin')
 
-    const newCard = (await screen.findByText('New')).closest('a')!
-    expect(newCard).toHaveAttribute('href', '/admin/requests?status=NEW')
+    // Scoped to the KPI list: the sidebar has nav links with several of the same
+    // labels, and picking the first one in the document would test the sidebar.
+    const figures = await screen.findByRole('list', { name: 'Key figures' })
+    const hrefFor = (label: string) => within(figures).getByText(label).closest('a')?.getAttribute('href')
 
-    const completedCard = screen.getByText('Completed').closest('a')!
-    expect(completedCard).toHaveAttribute('href', '/admin/requests?status=COMPLETED')
+    expect(await hrefFor('Learner requests')).toBe('/admin/requests')
+    expect(await hrefFor('Tutor applications')).toBe('/admin/tutors')
+    expect(await hrefFor('Approved tutors')).toBe('/admin/tutors?status=APPROVED')
+    expect(await hrefFor('Pending reviews')).toBe('/admin/tutors?status=PENDING_REVIEW')
+  })
+
+  it('says what each learner figure counts, rather than implying an activity measure', async () => {
+    // There is no visitor tracking, so "active learners" cannot be computed.
+    // Both real counts are shown with their definitions attached.
+    stubApi({})
+    renderAt(<AdminDashboardPage />, '/admin')
+
+    // "Learner accounts" appears twice on purpose — as a KPI card and as the
+    // heading of the panel that defines it — so the assertions are scoped.
+    expect((await screen.findAllByText('Learner accounts')).length).toBeGreaterThan(0)
+    expect(screen.getByText('every client account on the platform')).toBeInTheDocument()
+    expect(
+      screen.getByText(/freshest demand signal the request table holds/i),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByText(/client sign-ups; 2 requested a tutor in the last 30 days/i),
+    ).toBeInTheDocument()
   })
 })
 
@@ -345,7 +480,7 @@ describe('AdminRequestsPage', () => {
     stubApi({})
     renderAt(<AdminRequestsPage />, '/admin/requests')
 
-    expect(screen.getByText('Loading tutor requests…')).toBeInTheDocument()
+    expect(screen.getByRole('status', { name: 'Loading tutor requests' })).toBeInTheDocument()
     // Rendered twice on purpose: once in the desktop table, once in the mobile
     // card list, with CSS deciding which is visible.
     await waitFor(() => expect(screen.getAllByText('Abel Tesfaye').length).toBeGreaterThan(0))
@@ -426,13 +561,15 @@ describe('AdminRequestsPage', () => {
     await waitFor(() => expect(screen.getByLabelText('Status')).toBeInTheDocument())
 
     const options = within(screen.getByLabelText('Status')).getAllByRole('option')
+    // Labelled from the shared STATUS_STYLES map rather than a second local
+    // copy, so a status cannot be named two different ways in two places.
     expect(options.map((o) => o.textContent)).toEqual([
       'All',
-      'New',
-      'Contacted',
-      'In Progress',
-      'Completed',
-      'Cancelled',
+      'NEW',
+      'CONTACTED',
+      'IN PROGRESS',
+      'COMPLETED',
+      'CANCELLED',
     ])
   })
 
@@ -548,7 +685,15 @@ describe('AdminRequestDetailPage', () => {
     expect(screen.getByText('I need help with calculus for my exam.')).toBeInTheDocument()
     expect(screen.getByText('Online')).toBeInTheDocument()
     expect(screen.getByText('Downtown')).toBeInTheDocument()
-    expect(screen.getByText('$20 per hour')).toBeInTheDocument()
+    // The amount and its currency are shown together. An admin reading a bare
+    // number has no idea whether to quote birr or dollars.
+    expect(screen.getByText('20 USD')).toBeInTheDocument()
+    expect(screen.getByText('Schedule timezone')).toBeInTheDocument()
+    expect(screen.getByText('Africa/Addis_Ababa')).toBeInTheDocument()
+    expect(screen.getByText('Main goal')).toBeInTheDocument()
+    expect(screen.getByText('exam-preparation')).toBeInTheDocument()
+    expect(screen.getByText('Country')).toBeInTheDocument()
+    expect(screen.getByText('ET')).toBeInTheDocument()
 
     expect(screen.getByText('Request Information')).toBeInTheDocument()
     expect(screen.getByText('Created')).toBeInTheDocument()
@@ -560,7 +705,17 @@ describe('AdminRequestDetailPage', () => {
       detail: () =>
         jsonResponse({
           success: true,
-          data: detailRecord({ telegramUsername: null, email: null, location: null, budget: null }),
+          data: detailRecord({
+            telegramUsername: null,
+            email: null,
+            location: null,
+            budget: null,
+            budgetAmount: null,
+            budgetCurrency: null,
+            learningGoal: null,
+            timezone: null,
+            subjects: [],
+          }),
         }),
     })
     renderAt(<AdminRequestDetailPage />, `/admin/requests/${id}`)

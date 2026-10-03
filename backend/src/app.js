@@ -3,9 +3,12 @@ import express from 'express'
 import path from 'node:path'
 
 import { env } from './config/env.js'
+import { adminAnalyticsRouter } from './modules/adminAnalytics/index.js'
 import { adminRequestsRouter } from './modules/adminRequests/index.js'
 import { adminTutorsRouter } from './modules/adminTutors/index.js'
 import { authRouter } from './modules/auth/index.js'
+import { onboardingRouter } from './modules/onboarding/index.js'
+import { adminSiteStatsRouter } from './modules/siteStats/index.js'
 import { subjectsRouter } from './modules/subjects/index.js'
 import { uploadsRouter } from './modules/uploads/index.js'
 import { tutorProfileRouter } from './modules/tutorProfile/index.js'
@@ -44,6 +47,9 @@ export function createApp() {
 
   app.use('/api/health', healthRouter)
   app.use('/api/auth', authRouter)
+  // Reference data the public request wizard loads on entry: countries,
+  // currencies, timezones, curricula and subjects.
+  app.use('/api/onboarding', onboardingRouter)
   app.use('/api/tutor-requests', tutorRequestsRouter)
   app.use('/api/tutors', tutorsRouter)
   app.use('/api/public', publicRouter)
@@ -73,6 +79,10 @@ export function createApp() {
   // ADMIN_API_TOKEN is configured.
   app.use('/api/admin', adminRequestsRouter)
   app.use('/api/admin', adminTutorsRouter)
+  app.use('/api/admin', adminSiteStatsRouter)
+  // Read-only dashboard aggregates. Registered last so the queue routers above
+  // keep first refusal on their own paths.
+  app.use('/api/admin', adminAnalyticsRouter)
 
   // Unmatched /api paths answer with the standard error envelope. Express's
   // default 404 is an HTML page, which a JSON client cannot parse — it reports

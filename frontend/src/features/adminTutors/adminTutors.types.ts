@@ -145,7 +145,14 @@ export interface AdminTutorListItem {
   location: string | null
   teachingMode: string
   studentLevels: string[]
-  hourlyRate: string | number | null
+  /**
+   * The tutor's own rate for each market.
+   *
+   * Two numbers, never derived from one another — there is no exchange rate in
+   * this product, so a moderator is looking at two prices the tutor stated.
+   */
+  hourlyRateEtb: number | null
+  hourlyRateUsd: number | null
   profileStatus: ProfileStatus
   verificationStatus: VerificationStatus
   createdAt: string

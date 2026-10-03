@@ -43,12 +43,49 @@ export interface AdminRequestListItem {
   learningMode: string
   status: AdminStatus
   createdAt: string
+  /**
+   * ISO 3166-1 alpha-2. Which currency a budget on this row is in, and which
+   * timezone its availability is written in, is decided by this and nothing
+   * else — so it travels with the row rather than being inferred on screen.
+   * Null on requests made before the wizard asked for a country.
+   */
+  countryCode: string | null
   /** Requirement 13.1: which tutor the client chose, when they chose one. */
   tutorProfileId: string | null
   tutor: RequestedTutor | null
 }
 
-export interface AdminRequestDetail extends AdminRequestListItem {
+/**
+ * Everything the request wizard collects beyond the original form's fields.
+ *
+ * Each group is optional because a request submitted before the wizard carries
+ * none of them, and a null here means "we were never told", not "no".
+ */
+export interface AdminRequestOnboarding {
+  countryCode: string | null
+  /** IANA identifier, e.g. `Africa/Addis_Ababa`. Never converted. */
+  timezone: string | null
+  educationLevelCode: string | null
+  /** Subject names from the many-to-many join, in alphabetical order. */
+  subjects: string[]
+  /** The client's own wording for the subjects under "Other". */
+  subjectOther: string | null
+  learningGoal: string | null
+  learningGoalOther: string | null
+  preferredDayNames: string[]
+  preferredTimeRanges: string[]
+  /**
+   * The budget, kept as a number plus a currency code.
+   *
+   * Deliberately two fields rather than one formatted string: the admin must be
+   * able to see that a quoted amount is in ETB and not silently read it as
+   * dollars. `budget` below is still sent as a readable summary for display.
+   */
+  budgetAmount: number | null
+  budgetCurrency: string | null
+}
+
+export interface AdminRequestDetail extends AdminRequestListItem, AdminRequestOnboarding {
   phone: string
   telegramUsername: string | null
   email: string | null

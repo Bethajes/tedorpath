@@ -13,6 +13,8 @@
 
 import type { EducationLevel } from '@/types/tutorRequest'
 
+import type { Market } from './market'
+
 /**
  * How a tutor is willing to teach.
  *
@@ -93,8 +95,20 @@ interface TutorPublicFields {
   profilePhotoUrl: string | null
   teachingMode: TeachingMode
   location: string | null
-  /** Parsed to a number by the server; null when the tutor has not set one. */
+  /**
+   * The rate for the market this listing was requested in, parsed to a number by
+   * the server. Null when the tutor does not price in that market — which is a
+   * different answer from zero.
+   *
+   * `hourlyRateCurrency` travels with it rather than being assumed, so a client
+   * can never render a number it has not been told the unit of.
+   */
   hourlyRate: number | null
+  hourlyRateCurrency: string | null
+  //
+  // Only the visitor's own market is sent. The API does not return the other
+  // market's rate, so there is no second price available for a component to
+  // display by accident — which is the failure this field used to make possible.
   /** Whatever levels the profile stored — see TutorStudentLevel. */
   studentLevels: string[]
   /**
@@ -163,6 +177,15 @@ export interface TutorFilters {
    * Requirements: 30.2, 30.4
    */
   language?: string
+  /**
+   * The market the rates are read in.
+   *
+   * A visitor's, not a tutor's: `minRate=10` is a different question for someone
+   * in Addis than for someone in London. The server filters, sorts and prices on
+   * this same value, so the filter and the displayed price can never answer two
+   * different questions.
+   */
+  market?: Market
   minRate?: number
   maxRate?: number
   sort?: TutorSortOption

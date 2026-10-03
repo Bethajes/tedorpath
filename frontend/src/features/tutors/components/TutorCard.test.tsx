@@ -57,6 +57,10 @@ const tutorArbitrary: fc.Arbitrary<TutorCardDTO> = fc.record({
     fc.integer({ min: 0, max: 500 }).map((value) => value / 100),
     { nil: null },
   ),
+  // Paired with the rate above. Generated independently on purpose: the point is
+  // that a currency is always present whenever a rate is, and this suite would
+  // not notice if the component started inventing one when it is not.
+  hourlyRateCurrency: fc.option(fc.constantFrom('ETB', 'USD'), { nil: null }),
   studentLevels: fc.array(fc.constantFrom('High School', 'University'), { minLength: 1 }),
   // Tutor-authored free text, so the generator includes multi-language and
   // empty cases — the card has to cope with both (Requirement 30.6).
@@ -115,7 +119,12 @@ describe('Property 9: TutorCard renders all required public fields', () => {
         }[tutor.teachingMode]
         expect(card.text).toContain(modeLabel)
 
-        // A "View Profile" link pointing at this tutor.
+        /*
+          A "View Profile" link pointing at this tutor. It carries no market: the
+          server decides once, from who is asking, which price this visitor is
+          shown, so a link that named one could only re-assert what the card is
+          already displaying.
+        */
         const link = card.getByRole('link', { name: /view profile/i })
         expect(link).toHaveAttribute('href', `/tutors/${tutor.id}`)
       }),
@@ -148,6 +157,7 @@ describe('TutorCard (Requirement 9.2 — placeholder avatar)', () => {
       teachingMode: 'ONLINE',
       location: null,
       hourlyRate: null,
+      hourlyRateCurrency: null,
       studentLevels: ['University'],
       languages: [],
       createdAt: '2024-01-01T00:00:00.000Z',
@@ -174,6 +184,7 @@ describe('TutorCard (Requirement 9.2 — placeholder avatar)', () => {
       teachingMode: 'ONLINE',
       location: null,
       hourlyRate: null,
+      hourlyRateCurrency: null,
       studentLevels: ['University'],
       languages: [],
       createdAt: '2024-01-01T00:00:00.000Z',
@@ -203,6 +214,7 @@ describe('TutorCard (Requirement 9.1 — conditional fields)', () => {
     teachingMode: 'ONLINE',
     location: null,
     hourlyRate: null,
+    hourlyRateCurrency: null,
     studentLevels: ['University'],
     languages: [],
     createdAt: '2024-01-01T00:00:00.000Z',
@@ -223,9 +235,22 @@ describe('TutorCard (Requirement 9.1 — conditional fields)', () => {
     expect(card.text).toContain('25 per hour')
   })
 
-  it('shows a zero rate rather than treating it as absent', () => {
-    // 0 is a real price. A truthiness check would hide the one tutor who is
-    // free, which is exactly the person a visitor is looking for.
+  it('shows one price for a tutor priced in two markets', () => {
+    // The card used to print a second line — "also 12.00 USD per hour" — which
+    // put two numbers on screen for the same hour of teaching and left the visitor
+    // to work out which one they would be charged. The API sends one price, so
+    // this asserts the card renders exactly that one.
+    const card = renderCard({ ...base, hourlyRate: 25, hourlyRateCurrency: 'ETB' })
+
+    expect(card.text).toContain('25 ETB per hour')
+    expect(card.text.match(/per hour/g)).toHaveLength(1)
+  })
+
+  it('renders a zero rate rather than hiding it', () => {
+    // The API rejects a zero rate, so this cannot reach a card from the server.
+    // It is kept because a formatter that turns 0 into nothing is one refactor away
+    // from hiding a real number, and the day a zero-decimal market exists this is
+    // the line that stops it.
     const card = renderCard({ ...base, hourlyRate: 0 })
 
     expect(card.text).toContain('0 per hour')
@@ -290,6 +315,7 @@ describe('TutorCard — the grid variant carries the same information', () => {
       teachingMode: 'BOTH',
       location: 'Addis Ababa',
       hourlyRate: 25,
+      hourlyRateCurrency: 'ETB',
       studentLevels: ['High School'],
       languages: ['English', 'Amharic'],
       subjects: [
@@ -312,17 +338,20 @@ describe('TutorCard — the grid variant carries the same information', () => {
       'English',
       'Online & in person',
       'Addis Ababa',
-      '25 per hour',
+      // The currency code travels with the number. A card that printed only "25"
+      // would be showing a price whose unit nobody could identify.
+      '25 ETB per hour',
       'View Profile',
     ]) {
       expect(row.text, `row variant is missing "${expected}"`).toContain(expected)
       expect(grid.text, `grid variant is missing "${expected}"`).toContain(expected)
     }
 
-    expect(grid.getByRole('link', { name: /view profile/i })).toHaveAttribute(
-      'href',
-      `/tutors/${tutor.id}`,
-    )
+    // Plain route, in both variants. The market is the server's decision, so the
+    // link does not get to restate it.
+    const href = `/tutors/${tutor.id}`
+    expect(row.getByRole('link', { name: /view profile/i })).toHaveAttribute('href', href)
+    expect(grid.getByRole('link', { name: /view profile/i })).toHaveAttribute('href', href)
   })
 
   it('gives the row variant the bio excerpt and join date the grid variant has no room for', () => {
@@ -339,6 +368,7 @@ describe('TutorCard — the grid variant carries the same information', () => {
       teachingMode: 'ONLINE',
       location: 'Remote',
       hourlyRate: 40,
+      hourlyRateCurrency: 'ETB',
       studentLevels: ['University'],
       languages: ['English'],
       createdAt: '2024-03-01T00:00:00.000Z',
@@ -378,6 +408,7 @@ describe('TutorCard — the grid variant carries the same information', () => {
       teachingMode: 'ONLINE',
       location: null,
       hourlyRate: null,
+      hourlyRateCurrency: null,
       studentLevels: ['University'],
       languages: ['English'],
       createdAt: 'not-a-date',
@@ -398,6 +429,7 @@ describe('TutorCard — the grid variant carries the same information', () => {
       teachingMode: 'ONLINE',
       location: null,
       hourlyRate: null,
+      hourlyRateCurrency: null,
       studentLevels: ['University'],
       languages: ['English'],
       createdAt: '2024-03-01T00:00:00.000Z',

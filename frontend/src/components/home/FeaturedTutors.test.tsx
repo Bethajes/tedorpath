@@ -35,6 +35,7 @@ function makeTutor(overrides: Partial<TutorCardDTO> = {}): TutorCardDTO {
     teachingMode: 'ONLINE',
     location: 'Addis Ababa',
     hourlyRate: 50,
+    hourlyRateCurrency: 'ETB',
     studentLevels: ['High School'],
     languages: ['English'],
     subjects: [{ id: 'sub-1', name: 'Mathematics', slug: 'mathematics' }],
@@ -63,9 +64,23 @@ function ok(data: unknown) {
 }
 
 /** Stubs the directory request and fails loudly on any other path. */
+/**
+ * The market lookup, resolved immediately.
+ *
+ * Every surface that shows a rate asks this first, because a tutor states a rate
+ * per market and the page has to know which one before it can show either. Its
+ * own behaviour is covered by market.test.ts; here it is only a precondition.
+ */
+function stubMarket() {
+  return Promise.resolve(
+    Response.json({ success: true, data: { market: 'ETB', country: 'ET', detected: true } }),
+  )
+}
+
 function stubTutors(items: TutorCardDTO[]) {
   fetchMock.mockImplementation((input: string) => {
     const url = new URL(input, 'http://localhost')
+    if (url.pathname === '/api/onboarding/market') return stubMarket()
     if (url.pathname === '/api/tutors') return Promise.resolve(ok(makeListResponse(items)))
     throw new Error(`unexpected request: ${url.pathname}`)
   })
@@ -74,6 +89,7 @@ function stubTutors(items: TutorCardDTO[]) {
 function stubFailure() {
   fetchMock.mockImplementation((input: string) => {
     const url = new URL(input, 'http://localhost')
+    if (url.pathname === '/api/onboarding/market') return stubMarket()
     if (url.pathname === '/api/tutors') {
       return Promise.resolve(
         new Response(
@@ -121,6 +137,7 @@ const tutorArbitrary: fc.Arbitrary<TutorCardDTO> = fc.record({
   teachingMode: fc.constant('ONLINE' as const),
   location: fc.constant('Addis Ababa'),
   hourlyRate: fc.integer({ min: 1, max: 200 }),
+  hourlyRateCurrency: fc.constant('ETB' as const),
   studentLevels: fc.constant(['High School']),
   languages: fc.constant(['English']),
   subjects: fc.constant([]),
@@ -218,6 +235,9 @@ describe('FeaturedTutors — Property 3: featured tutors match the API response'
           .filter((href): href is string => href !== null)
 
         for (const item of items) {
+          // The plain profile route. Which of a tutor's prices this visitor is
+          // shown is the server's decision, made from who is asking, so the link
+          // does not name a market it cannot vouch for.
           expect(hrefs).toContain(`/tutors/${item.id}`)
         }
 
@@ -238,14 +258,23 @@ describe('FeaturedTutors — how it asks for tutors', () => {
     renderSection()
 
     await waitFor(() => {
-      expect(fetchMock).toHaveBeenCalledTimes(1)
+      expect(
+        fetchMock.mock.calls.filter((call) => String(call[0]).includes('/api/tutors?')),
+      ).toHaveLength(1)
     })
 
-    const url = new URL(fetchMock.mock.calls[0][0] as string, 'http://localhost')
+    const directoryCall = fetchMock.mock.calls.find((call) =>
+      String(call[0]).includes('/api/tutors?'),
+    )!
+    const url = new URL(String(directoryCall[0]), 'http://localhost')
     expect(url.pathname).toBe('/api/tutors')
     // Requirement 6.2: a limited number, not the whole directory.
     expect(url.searchParams.get('limit')).toBe('6')
     expect(url.searchParams.get('page')).toBe('1')
+    // No market is named. The server works out which price this visitor is served
+    // from who is asking, so asking here as well would be a second, weaker answer
+    // that could disagree with it.
+    expect(url.searchParams.get('market')).toBeNull()
   })
 })
 

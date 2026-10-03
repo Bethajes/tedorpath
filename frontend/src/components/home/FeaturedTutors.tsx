@@ -30,8 +30,15 @@ export function FeaturedTutors() {
   useEffect(() => {
     let active = true
 
-    // The server filters to APPROVED profiles itself, so there is no client-side
-    // status check to forget to keep in step with the backend.
+    /*
+     * No market is chosen or sent. The server prices this for whoever is asking
+     * and sends one price per card, so there is no window in which a dollar price
+     * could be rendered and then switch to birr — the thing the old two-phase
+     * resolve-then-fetch existed to prevent.
+     *
+     * The server filters to APPROVED profiles itself, so there is no client-side
+     * status check to forget to keep in step with the backend.
+     */
     listTutors({}, 1, FEATURED_LIMIT)
       .then((result) => {
         if (active) setTutors(result.items)
@@ -47,6 +54,8 @@ export function FeaturedTutors() {
     }
   }, [])
 
+  // Nothing gates this on a market any more. The request above already came back
+  // priced, so "did it arrive" is the only question left about whether to render.
   const hasTutors = tutors !== undefined && tutors.length > 0
 
   return (

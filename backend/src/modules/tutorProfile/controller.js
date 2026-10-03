@@ -50,6 +50,15 @@ export async function createTutorProfileHandler(req, res) {
               message: result.message,
             },
           })
+        case 'VALIDATION_ERROR':
+          return res.status(422).json({
+            success: false,
+            error: {
+              code: result.code,
+              message: result.message,
+              fields: result.fields,
+            },
+          })
         default:
           return res.status(500).json({
             success: false,
@@ -120,6 +129,15 @@ export async function updateTutorProfileHandler(req, res) {
             error: {
               code: result.code,
               message: result.message,
+            },
+          })
+        case 'VALIDATION_ERROR':
+          return res.status(422).json({
+            success: false,
+            error: {
+              code: result.code,
+              message: result.message,
+              fields: result.fields,
             },
           })
         case 'PROFILE_NOT_FOUND':

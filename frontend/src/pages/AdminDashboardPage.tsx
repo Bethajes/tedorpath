@@ -1,55 +1,119 @@
-import type { ReactNode } from 'react'
+import { useState } from 'react'
 import { Link } from 'react-router-dom'
 
+import { ActivityFeed, LearnerSignals } from '@/components/admin/ActivityFeed'
+import { AttentionGrid, QuickActions, type AttentionItem } from '@/components/admin/AttentionPanels'
+import { SubjectBreakdown, VerificationSummary } from '@/components/admin/Breakdowns'
+import { KpiRow, type KpiCard } from '@/components/admin/KpiCards'
+import { TrendChart } from '@/components/admin/TrendChart'
 import { AdminPageHeader, AdminShell } from '@/components/layout/AdminShell'
-import { Alert, Button } from '@/components/ui'
-import { fetchAdminRequests, fetchAdminStats } from '@/features/adminRequests/adminRequests.api'
-import { StatsCards } from '@/features/adminRequests/components/StatsCards'
-import { StatusBadge } from '@/features/adminRequests/components/StatusBadge'
+import { Alert, Button, Select } from '@/components/ui'
+import { fetchDashboard } from '@/features/adminAnalytics/adminAnalytics.api'
+import {
+  TREND_WINDOWS,
+  type DashboardOverview,
+  type TrendWindowDays,
+} from '@/features/adminAnalytics/adminAnalytics.types'
+import { fetchAdminRequests } from '@/features/adminRequests/adminRequests.api'
+import { STATUS_STYLES } from '@/features/adminRequests/components/StatusBadge'
+import type { AdminRequestListItem, AdminStatus } from '@/features/adminRequests/types'
 import { ApiError } from '@/lib/api'
 import { cn } from '@/lib/cn'
 import { formatWhen } from '@/lib/formatDate'
 import { useAsyncData } from '@/lib/useAsyncData'
 
-import type { AdminRequestListItem, AdminStats } from '@/features/adminRequests/types'
+/**
+ * The admin dashboard.
+ *
+ * Its whole job is to answer one question: what is waiting for me? Everything
+ * below is arranged around that — the counts that need a decision come first, the
+ * places an admin goes next come next, and the trends and breakdowns come last
+ * because they are context rather than a to-do list.
+ *
+ * ON WHAT THESE NUMBERS ARE
+ *
+ * Every figure comes from `GET /api/admin/dashboard`, which counts rows in
+ * `tutor_requests` and `tutor_profiles`. There is no growth percentage, no
+ * conversion rate, no average response time and no rating on this page, because
+ * the platform records none of those — a back office that shows a figure nobody
+ * can trace to a row is worse than one that shows fewer.
+ *
+ * Where a number needs a definition to mean anything — "learners" most of all —
+ * the definition is printed next to it rather than left to the reader.
+ */
 
-/** How many rows the two lists below the counts show. */
-const RECENT_LIMIT = 5
+/** How many rows the latest-requests list shows. */
+const RECENT_LIMIT = 6
 
 /**
- * The dashboard's job is to answer one question: what is waiting for me?
+ * How long a request may sit in NEW before the dashboard counts it as a
+ * follow-up.
  *
- * It previously showed counts and a list of the five most recent requests, with
- * no distinction between them — so a request that had just arrived looked
- * exactly like one an admin had been ignoring for a fortnight, and the only way
- * to notice anything new was to read every row. The two pieces below fix that:
- * anything awaiting a first response is lifted into a panel of its own with a
- * relative timestamp, and every count is a link into the filtered queue.
+ * Sent to the server rather than applied in the browser, so the count and the
+ * rule printed beside it are computed from the same pair of values.
  */
+const FOLLOW_UP_DAYS = 7
+
+interface DashboardData {
+  overview: DashboardOverview
+  recent: AdminRequestListItem[]
+}
+
+function describeError(error: unknown): string {
+  if (error instanceof ApiError && error.status === 401) {
+    return 'Your admin session is no longer valid. Please sign in again.'
+  }
+  return 'Unable to load the dashboard. Please try again.'
+}
+
 export function AdminDashboardPage() {
-  const { data, loading, error, reload } = useAsyncData(
+  const [days, setDays] = useState<TrendWindowDays>(30)
+
+  const { data, loading, error, reload } = useAsyncData<DashboardData>(
     async () => {
-      const [stats, list] = await Promise.all([
-        fetchAdminStats(),
+      // One request for the aggregates, one for the rows. They cannot be the
+      // same call by design: the dashboard endpoint returns counts only, so it
+      // never carries a learner's name in a payload of otherwise anonymous
+      // numbers. Running them together keeps the page to a single loading state.
+      const [overview, recent] = await Promise.all([
+        fetchDashboard(days, FOLLOW_UP_DAYS),
         fetchAdminRequests({ page: 1, limit: RECENT_LIMIT }),
       ])
-      return { stats, recent: list.items }
+
+      return { overview, recent: recent.items }
     },
-    [],
+    [days],
     describeError,
   )
 
-  const recent = data?.recent ?? null
+  const overview = data?.overview ?? null
 
   return (
-    <AdminShell>
+    <AdminShell attention={attentionCounts(overview)}>
       <AdminPageHeader
         title="Dashboard"
-        description="Learner requests and tutor applications that need a decision."
+        description="Learner requests and tutor applications that need a decision, counted from the database."
         actions={
-          <Button variant="outline" onClick={reload} disabled={loading}>
-            Refresh
-          </Button>
+          <div className="flex items-center gap-2">
+            <label htmlFor="trend-window" className="sr-only">
+              Trend window
+            </label>
+            <Select
+              id="trend-window"
+              value={String(days)}
+              onChange={(event) => setDays(Number(event.target.value) as TrendWindowDays)}
+              className="w-auto"
+            >
+              {TREND_WINDOWS.map((window) => (
+                <option key={window.days} value={window.days}>
+                  Last {window.label}
+                </option>
+              ))}
+            </Select>
+            <Button variant="outline" onClick={reload} disabled={loading}>
+              Refresh
+            </Button>
+          </div>
         }
       />
 
@@ -62,198 +126,294 @@ export function AdminDashboardPage() {
         </Alert>
       ) : null}
 
-      {loading ? (
-        <p
-          role="status"
-          className="rounded-xl border border-slate-200 bg-white p-6 text-sm text-slate-600 shadow-sm"
-        >
-          Loading dashboard…
-        </p>
+      {loading && !data ? <DashboardSkeleton /> : null}
+
+      {overview ? (
+        <div className="space-y-8">
+          <KpiRow cards={kpiCards(overview)} />
+
+          <section aria-labelledby="needs-attention">
+            <SectionHeading
+              id="needs-attention"
+              title="Needs attention"
+              description="The four queues where somebody is blocked on a person in this room."
+            />
+            <AttentionGrid items={attentionItems(overview)} />
+          </section>
+
+          <section aria-labelledby="quick-actions">
+            <SectionHeading id="quick-actions" title="Quick actions" />
+            <QuickActions />
+          </section>
+
+          <section aria-labelledby="trends">
+            <SectionHeading
+              id="trends"
+              title="Volume"
+              description={`Records created each day, ${overview.trends.from} to ${overview.trends.to}.`}
+            />
+            <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+              <TrendChart title="Learner requests per day" points={overview.trends.requests} tone="brand" />
+              <TrendChart
+                title="Tutor applications per day"
+                points={overview.trends.applications}
+                tone="accent"
+              />
+            </div>
+          </section>
+
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+            <ActivityFeed entries={overview.activity} className="lg:col-span-2" />
+            <div className="space-y-4">
+              <LearnerSignals learners={overview.learners} />
+              <VerificationSummary counts={overview.verification} />
+              <SubjectBreakdown rows={overview.subjects} />
+            </div>
+          </div>
+
+          <LatestRequests items={data?.recent ?? null} />
+        </div>
       ) : null}
-
-      {data && !loading ? <StatsCards stats={data.stats} /> : null}
-
-      {data && !loading ? <NeedsAttention stats={data.stats} /> : null}
-
-      <section className="mt-8" aria-labelledby="recent-requests">
-        <SectionHeader
-          id="recent-requests"
-          title="Latest requests"
-          to="/admin/requests"
-          linkLabel="View all requests"
-        />
-
-        {!loading && recent && recent.length === 0 ? (
-          <EmptyPanel
-            title="No learner requests yet"
-            body="When someone submits the tutor request form, it will appear here with their subject, level and contact details."
-          />
-        ) : null}
-
-        {recent && recent.length > 0 ? (
-          <ul className="divide-y divide-slate-100 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-            {recent.map((item) => (
-              <RequestRow key={item.id} item={item} />
-            ))}
-          </ul>
-        ) : null}
-      </section>
     </AdminShell>
   )
 }
 
 /**
- * The two queues, side by side, showing only what is waiting on a decision.
+ * The five KPI cards.
  *
- * A tutor application and a learner request are unrelated records that both
- * need an admin, and on a page of request-only figures the applications were
- * completely invisible. Rendering them together makes "is there anything for
- * me?" a single glance, which is the only reason to have a dashboard at all.
- *
- * Deliberately counts only, with no row list: the requests themselves are in the
- * feed below, and repeating them here would put the same request on the screen
- * twice.
+ * Each hint says what is counted rather than what the number implies, because
+ * "Approved tutors" could mean approved this month or approved ever, and only one
+ * of those is true.
  */
-function NeedsAttention({ stats }: { stats: AdminStats }) {
-  const applications = stats.tutorApplications
-  const pendingApplications = applications?.PENDING_REVIEW ?? 0
-  const newRequests = stats.NEW
-  const nothingWaiting = pendingApplications === 0 && newRequests === 0
+function kpiCards(data: DashboardOverview): KpiCard[] {
+  return [
+    {
+      key: 'requests',
+      label: 'Learner requests',
+      value: data.requests.total,
+      icon: 'requests',
+      to: '/admin/requests',
+      hint: 'every request ever submitted',
+      tone: 'brand',
+    },
+    {
+      key: 'tutorApplications',
+      label: 'Tutor applications',
+      value: data.applications.total,
+      icon: 'tutors',
+      to: '/admin/tutors',
+      hint: 'every tutor profile on the platform',
+      tone: 'brand',
+    },
+    {
+      key: 'approvedTutors',
+      label: 'Approved tutors',
+      value: data.applications.APPROVED,
+      icon: 'check',
+      to: '/admin/tutors?status=APPROVED',
+      hint: 'profiles visible in the public directory',
+      tone: 'emerald',
+    },
+    {
+      key: 'pendingReviews',
+      label: 'Pending reviews',
+      value: data.applications.PENDING_REVIEW,
+      icon: 'clock',
+      to: '/admin/tutors?status=PENDING_REVIEW',
+      hint: 'applications awaiting a decision',
+      tone: 'amber',
+      actionable: true,
+    },
+    {
+      key: 'learners',
+      label: 'Learner accounts',
+      value: data.learners.registered,
+      icon: 'sparkle',
+      to: '/admin/requests',
+      hint: `client sign-ups; ${data.learners.requestedRecently} requested a tutor in the last ${data.learners.windowDays} days`,
+      tone: 'accent',
+    },
+  ]
+}
 
+/**
+ * The four attention panels.
+ *
+ * The follow-up count is derived from `createdAt` on the server rather than
+ * stored as a flag, so it cannot go stale: a request that ages past the threshold
+ * appears without anything having to record that it aged.
+ */
+function attentionItems(data: DashboardOverview): AttentionItem[] {
+  return [
+    {
+      key: 'new-requests',
+      label: 'New requests',
+      count: data.requests.NEW,
+      detail: 'waiting for a first reply',
+      to: '/admin/requests?status=NEW',
+      cta: 'See new requests',
+      icon: 'requests',
+      tone: 'blue',
+      clearLabel: 'Every learner request has had a reply',
+    },
+    {
+      key: 'pending-applications',
+      label: 'Applications to review',
+      count: data.applications.PENDING_REVIEW,
+      detail: 'waiting for a moderation decision',
+      to: '/admin/tutors?status=PENDING_REVIEW',
+      cta: 'Start reviewing',
+      icon: 'tutors',
+      tone: 'amber',
+      clearLabel: 'No applications are waiting for review',
+    },
+    {
+      key: 'missing-documents',
+      label: 'Missing documents',
+      count: data.applications.NEEDS_INFORMATION,
+      detail: 'tutors waiting on paperwork you asked for',
+      to: '/admin/tutors?status=NEEDS_INFORMATION',
+      cta: 'Chase documents',
+      icon: 'document',
+      tone: 'orange',
+      clearLabel: 'Nobody is waiting on documents',
+    },
+    {
+      key: 'follow-ups',
+      label: 'Follow-ups',
+      count: data.matching.stale,
+      detail: `new for over ${data.matching.staleDays} days with no reply`,
+      to: '/admin/requests?status=NEW',
+      cta: 'Open the stale ones',
+      icon: 'clock',
+      tone: 'ink',
+      clearLabel: `Nothing has been waiting over ${data.matching.staleDays} days`,
+    },
+  ]
+}
+
+/**
+ * The counts behind the header's notification bell.
+ *
+ * `undefined` while loading rather than three zeroes, so the bell does not claim
+ * "nothing waiting" before the numbers have arrived.
+ */
+function attentionCounts(data: DashboardOverview | null) {
+  if (!data) return undefined
+
+  return {
+    newRequests: data.requests.NEW,
+    pendingApplications: data.applications.PENDING_REVIEW,
+    needsInformation: data.applications.NEEDS_INFORMATION,
+  }
+}
+
+function SectionHeading({
+  id,
+  title,
+  description,
+}: {
+  id: string
+  title: string
+  description?: string
+}) {
   return (
-    <section className="mt-8" aria-labelledby="needs-attention">
-      <SectionHeader id="needs-attention" title="Waiting for a decision" />
+    <div className="mb-4">
+      <h2 id={id} className="text-lg font-semibold text-ink-900">
+        {title}
+      </h2>
+      {description ? <p className="mt-0.5 text-sm text-ink-600">{description}</p> : null}
+    </div>
+  )
+}
 
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <WaitingCard
-          heading="Learner requests"
-          count={newRequests}
-          countLabel="waiting for a first reply"
-          clearLabel="All learner requests have had a reply"
-          to="/admin/requests?status=NEW"
-          cta="See all new requests"
-          tone="blue"
-        />
+/**
+ * Placeholder rows while the first load runs.
+ *
+ * Shaped like the real cards so the page does not jump when they land. Bars
+ * rather than a spinner because a spinner says "something is happening" and a
+ * skeleton says "here is what is coming".
+ */
+function DashboardSkeleton() {
+  return (
+    <div role="status" aria-label="Loading dashboard" className="space-y-8">
+      <ul className="grid grid-cols-2 gap-4 lg:grid-cols-3 xl:grid-cols-5">
+        {Array.from({ length: 5 }, (_, index) => (
+          <li key={index} className="h-36 animate-pulse rounded-xl border border-ink-200 bg-white shadow-sm" />
+        ))}
+      </ul>
+      <ul className="grid grid-cols-1 gap-4 md:grid-cols-2">
+        {Array.from({ length: 4 }, (_, index) => (
+          <li key={index} className="h-40 animate-pulse rounded-xl border border-ink-200 bg-white" />
+        ))}
+      </ul>
+    </div>
+  )
+}
 
-        <WaitingCard
-          heading="Tutor applications"
-          count={pendingApplications}
-          countLabel="waiting for review"
-          clearLabel="No applications waiting for review"
-          to="/admin/tutors?status=PENDING_REVIEW"
-          cta="Start reviewing"
-          tone="amber"
-          note={
-            applications && applications.NEEDS_INFORMATION > 0 ? (
-              <>
-                {applications.NEEDS_INFORMATION}{' '}
-                {applications.NEEDS_INFORMATION === 1 ? 'tutor is' : 'tutors are'} waiting on
-                documents you asked for.
-              </>
-            ) : null
-          }
-        />
+/**
+ * The most recent requests, so the dashboard is also a way into the queue.
+ *
+ * A request with no reply is tinted, because that is the row an admin is most
+ * likely to have to open next.
+ */
+function LatestRequests({ items }: { items: AdminRequestListItem[] | null }) {
+  return (
+    <section aria-labelledby="recent-requests">
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <SectionHeading id="recent-requests" title="Latest requests" />
+        <Link to="/admin/requests" className="shrink-0 text-sm font-medium text-brand-700 hover:underline">
+          View all requests
+        </Link>
       </div>
 
-      {nothingWaiting ? (
-        <p className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
-          Nothing is waiting for you right now.
-        </p>
+      {items && items.length === 0 ? (
+        <div className="rounded-xl border border-ink-200 bg-white px-5 py-8 text-center shadow-sm">
+          <p className="text-sm font-medium text-ink-900">No learner requests yet</p>
+          <p className="mx-auto mt-1 max-w-md text-sm text-ink-600">
+            When someone submits the tutor request form it will appear here with their subject, level
+            and contact details.
+          </p>
+        </div>
+      ) : null}
+
+      {items && items.length > 0 ? (
+        <ul className="divide-y divide-ink-100 overflow-hidden rounded-xl border border-ink-200 bg-white shadow-sm">
+          {items.map((item) => (
+            <LatestRequestRow key={item.id} item={item} />
+          ))}
+        </ul>
       ) : null}
     </section>
   )
 }
 
-function WaitingCard({
-  heading,
-  count,
-  countLabel,
-  clearLabel,
-  to,
-  cta,
-  tone,
-  note,
-}: {
-  heading: string
-  count: number
-  countLabel: string
-  clearLabel: string
-  to: string
-  cta: string
-  tone: 'blue' | 'amber'
-  note?: ReactNode
-}) {
-  const active = count > 0
-  const border = active ? (tone === 'blue' ? 'border-blue-200' : 'border-amber-200') : 'border-slate-200'
-  const chip = active
-    ? tone === 'blue'
-      ? 'bg-blue-100 text-blue-800'
-      : 'bg-amber-100 text-amber-800'
-    : 'bg-slate-100 text-slate-500'
-
-  return (
-    <div className={cn('flex flex-col rounded-xl border bg-white p-5 shadow-sm', border)}>
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <h3 className="text-sm font-semibold text-slate-900">{heading}</h3>
-          <p className="mt-0.5 text-sm text-slate-600">
-            {active ? `${count} ${countLabel}` : clearLabel}
-          </p>
-        </div>
-        <span
-          className={cn(
-            'shrink-0 rounded-full px-2.5 py-1 text-sm font-bold tabular-nums',
-            chip,
-          )}
-        >
-          {count}
-        </span>
-      </div>
-
-      {note ? (
-        <p className="mt-4 rounded-lg border border-orange-200 bg-orange-50 px-3 py-2.5 text-sm text-orange-900">
-          {note}
-        </p>
-      ) : (
-        <p className="mt-4 rounded-lg bg-slate-50 px-3 py-3 text-sm text-slate-500">
-          {active
-            ? 'Open the queue to work through them one at a time.'
-            : 'New submissions show up here the moment they arrive.'}
-        </p>
-      )}
-
-      <Link to={to} className="mt-4 text-sm font-medium text-brand-700 hover:underline">
-        {cta}
-      </Link>
-    </div>
-  )
-}
-
-function RequestRow({ item }: { item: AdminRequestListItem }) {
+function LatestRequestRow({ item }: { item: AdminRequestListItem }) {
   const isNew = item.status === 'NEW'
+  const style = STATUS_STYLES[item.status as AdminStatus]
+  const { label: when, title } = formatWhen(item.createdAt)
 
   return (
-    <li className={cn('px-4 py-3', isNew && 'bg-blue-50/40')}>
+    <li className={cn('px-5 py-3.5', isNew && 'bg-blue-50/40')}>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="min-w-0">
           <Link
             to={`/admin/requests/${item.id}`}
-            className="font-medium text-slate-900 hover:text-brand-700 hover:underline"
+            className="font-medium text-ink-900 hover:text-brand-700 hover:underline"
           >
             {item.fullName}
           </Link>
-          <p className="text-sm text-slate-600">
+          <p className="text-sm text-ink-600">
             {item.subject} · {item.educationLevel} · {item.learningMode}
           </p>
           {/*
             Named here because the dashboard is where an admin decides whether
-            anything needs opening at all. A request that is already routed to a
-            tutor is a different job from a cold one, and that difference was
-            invisible until the request had been opened.
+            anything needs opening at all. A request already routed to a tutor is
+            a different job from a cold one.
           */}
           {item.tutor ? (
             <p className="mt-1 text-sm">
-              <span className="text-slate-500">For </span>
+              <span className="text-ink-500">For </span>
               <Link
                 to={`/admin/tutors/${item.tutor.id}`}
                 className="font-medium text-brand-700 hover:underline"
@@ -263,69 +423,23 @@ function RequestRow({ item }: { item: AdminRequestListItem }) {
             </p>
           ) : null}
         </div>
+
         <div className="flex shrink-0 items-center gap-3">
-          <When iso={item.createdAt} />
-          <StatusBadge status={item.status} />
+          <time dateTime={item.createdAt} title={title} className="text-xs text-ink-500">
+            {when}
+          </time>
+          {style ? (
+            <span
+              className={cn(
+                'rounded-full border px-2 py-0.5 text-[0.65rem] font-semibold tracking-wide',
+                style.className,
+              )}
+            >
+              {style.label}
+            </span>
+          ) : null}
         </div>
       </div>
     </li>
   )
-}
-
-/**
- * A timestamp as "5 minutes ago", with the exact date on hover.
- *
- * The relative form is the useful one in a queue — it is what separates a
- * request that arrived a moment ago from one that has been sitting for a week —
- * and the absolute date stays available for when it has to be quoted.
- */
-function When({ iso }: { iso: string }) {
-  const { label, title } = formatWhen(iso)
-
-  return (
-    <time dateTime={iso} title={title} className="whitespace-nowrap text-xs text-slate-500">
-      {label}
-    </time>
-  )
-}
-
-function SectionHeader({
-  id,
-  title,
-  to,
-  linkLabel,
-}: {
-  id: string
-  title: string
-  to?: string
-  linkLabel?: string
-}) {
-  return (
-    <div className="mb-3 flex items-center justify-between gap-3">
-      <h2 id={id} className="text-lg font-semibold text-slate-900">
-        {title}
-      </h2>
-      {to && linkLabel ? (
-        <Link to={to} className="shrink-0 text-sm font-medium text-brand-700 hover:underline">
-          {linkLabel}
-        </Link>
-      ) : null}
-    </div>
-  )
-}
-
-function EmptyPanel({ title, body }: { title: string; body: string }) {
-  return (
-    <div className="rounded-xl border border-slate-200 bg-white px-5 py-8 text-center shadow-sm">
-      <p className="text-sm font-medium text-slate-900">{title}</p>
-      <p className="mx-auto mt-1 max-w-md text-sm text-slate-600">{body}</p>
-    </div>
-  )
-}
-
-function describeError(error: unknown) {
-  if (error instanceof ApiError && error.status === 401) {
-    return 'Your admin session is no longer valid. Please sign in again.'
-  }
-  return 'Unable to load the dashboard. Please try again.'
 }

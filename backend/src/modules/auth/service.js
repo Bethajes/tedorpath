@@ -32,6 +32,16 @@ export const PUBLIC_USER_SELECT = {
   role: true,
   image: true,
   createdAt: true,
+  // Coarse — a two-letter country, not an address. Present because the public tutor
+  // routes read it to decide which of a tutor's prices to show, and they resolve
+  // their market through `optionalAuth`, which only carries what this select lists.
+  //
+  // It is deliberately not in `toPublicUser`, so `/api/auth/me` does not start
+  // telling a signed-in client where it thinks its owner lives. The client does not
+  // need it: it asks `/api/onboarding/market`, which resolves the market and hands
+  // back a market code, and a country the account owner did not choose by hand is
+  // not something the interface should be reading back.
+  countryCode: true,
 }
 
 /** Prisma's "unique constraint failed" code. Checked by shape so a version

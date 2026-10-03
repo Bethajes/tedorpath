@@ -51,6 +51,24 @@ export const listTutorsQuerySchema = z.object({
     .transform((v) => (v !== undefined && v !== '' ? parseFloat(v) : undefined))
     .pipe(z.number().min(0).optional()),
 
+  /**
+   * Which market's rate the visitor is shopping in.
+   *
+   * Shape-checked as three letters here and checked against the `markets` table in
+   * the service, because the offered markets are data: a third one has to work
+   * without this file being edited.
+   *
+   * A visitor's market, not a tutor's: `minRate=10` means ten birr to someone in
+   * Addis and ten dollars to someone in London, and the filter would be answering
+   * a different question for each of them otherwise.
+   */
+  market: z
+    .string()
+    .trim()
+    .toUpperCase()
+    .length(3, 'Market must be a three-letter code such as ETB or USD.')
+    .optional(),
+
   /** Sort order */
   sort: z.enum(['recommended', 'price_asc', 'price_desc', 'newest']).default('recommended'),
 

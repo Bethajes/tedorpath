@@ -16,6 +16,7 @@ import fc from 'fast-check'
 import { createApp } from '../src/app.js'
 import { SESSION_COOKIE_NAME } from '../src/modules/auth/cookies.js'
 import { closePrisma, prisma } from '../src/lib/prisma.js'
+import { ratesFor } from './helpers/rates.mjs'
 
 let server
 let baseUrl
@@ -44,8 +45,14 @@ function nonBlank(maxLength) {
  *
  * Built from an integer number of cents so it is always representable as a
  * 32-bit float, which is what fast-check's `fc.float` requires.
+ *
+ * From one cent, not zero. Zero is rejected now: it is not a price, it sorts above
+ * every other tutor and filters under every budget. The properties below are about
+ * what a *valid* profile does, so an arbitrary that generates invalid ones fails
+ * them for the wrong reason — and does so on whichever seed happens to draw a zero,
+ * which is how this read as a flaky failure in a suite about draft statuses.
  */
-const rate = fc.integer({ min: 0, max: 999_999 }).map((cents) => cents / 100)
+const rate = fc.integer({ min: 1, max: 999_999 }).map((cents) => cents / 100)
 
 before(async () => {
   server = createApp().listen(0)
@@ -169,7 +176,7 @@ describe('Property 6: New profile always defaults to DRAFT', () => {
           location: fc.oneof(fc.constant(undefined), fc.string({ maxLength: 120 })),
           teachingMode: fc.constantFrom('ONLINE', 'IN_PERSON', 'BOTH'),
           studentLevels: fc.array(fc.constantFrom('Primary School', 'High School', 'University', 'Adult Learning'), { minLength: 1, maxLength: 5 }),
-          hourlyRate: fc.oneof(fc.constant(undefined), rate),
+          hourlyRateEtb: fc.oneof(fc.constant(undefined), rate),
         }),
         async (profileData) => {
           // Create a test user with session
@@ -461,7 +468,9 @@ async function createCompleteProfile(userId, overrides = {}) {
       bio: 'I have been teaching for 10 years.',
       teachingMode: 'ONLINE',
       studentLevels: ['High School'],
-      hourlyRate: 50,
+      // A priced draft, so the submission properties below reach the point they
+      // are actually about: the application reference, not a missing rate.
+      rates: ratesFor({ hourlyRateEtb: 50 }),
       profileStatus: overrides.profileStatus || 'DRAFT',
       verificationStatus: 'UNVERIFIED',
       applicationReference: overrides.applicationReference || null,

@@ -103,9 +103,9 @@ export function AdminTutorsPage() {
       />
 
       {/* Filters */}
-      <div className="mb-5 grid grid-cols-1 gap-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm sm:grid-cols-2">
+      <div className="mb-5 grid grid-cols-1 gap-3 rounded-xl border border-ink-200 bg-white p-4 shadow-sm sm:grid-cols-2">
         <div className="flex flex-col gap-1.5">
-          <label htmlFor="tutor-search" className="text-sm font-medium text-slate-800">
+          <label htmlFor="tutor-search" className="text-sm font-medium text-ink-800">
             Search
           </label>
           <Input
@@ -117,7 +117,7 @@ export function AdminTutorsPage() {
           />
         </div>
         <div className="flex flex-col gap-1.5">
-          <label htmlFor="status-filter" className="text-sm font-medium text-slate-800">
+          <label htmlFor="status-filter" className="text-sm font-medium text-ink-800">
             Status
           </label>
           <Select
@@ -149,7 +149,7 @@ export function AdminTutorsPage() {
       {loading ? (
         <p
           role="status"
-          className="rounded-xl border border-slate-200 bg-white p-6 text-sm text-slate-600 shadow-sm"
+          className="rounded-xl border border-ink-200 bg-white p-6 text-sm text-ink-600 shadow-sm"
         >
           Loading tutor applications…
         </p>
@@ -157,7 +157,7 @@ export function AdminTutorsPage() {
 
       {/* Empty state */}
       {!loading && items && items.length === 0 ? (
-        <p className="rounded-xl border border-slate-200 bg-white p-6 text-sm text-slate-600 shadow-sm">
+        <p className="rounded-xl border border-ink-200 bg-white p-6 text-sm text-ink-600 shadow-sm">
           {query || status !== 'all'
             ? 'No tutor applications match your search or filter.'
             : 'No tutor applications yet.'}
@@ -171,7 +171,7 @@ export function AdminTutorsPage() {
       {!loading && pagination && pagination.totalPages > 1 ? (
         <nav
           aria-label="Pagination"
-          className="mt-5 flex items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-sm"
+          className="mt-5 flex items-center justify-between gap-3 rounded-xl border border-ink-200 bg-white px-4 py-3 shadow-sm"
         >
           <Button
             variant="outline"
@@ -181,7 +181,7 @@ export function AdminTutorsPage() {
           >
             Previous
           </Button>
-          <span className="text-sm text-slate-600">
+          <span className="text-sm text-ink-600">
             Page {page} of {pagination.totalPages}
           </span>
           <Button

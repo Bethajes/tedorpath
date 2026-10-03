@@ -167,6 +167,49 @@ describe('contact details for sending documents', () => {
 
     expect(await screen.findByText(/Government-issued identification/i)).toBeInTheDocument()
   })
+
+  it('prints the handle, because that is the address the tutor has to reach', async () => {
+    // Regression guard. The handle used to sit in a screen-reader-only span, so a
+    // sighted tutor saw "Message on Telegram" and still had no idea which account
+    // they were about to open — while sending an identity document, which is the
+    // worst possible moment to go hunting through an app for a username.
+    stubApi(profile())
+    renderPageWith({ VITE_CONTACT_TELEGRAM: '@Tedor_Team', VITE_CONTACT_WHATSAPP: '' })
+
+    const link = await screen.findByRole('link', { name: /message on telegram/i })
+    expect(link).toHaveTextContent('@Tedor_Team')
+    expect(link.querySelector('.sr-only')).toBeNull()
+  })
+
+  it('names the handle in the documents panel itself, not only on the button', async () => {
+    // The instruction paragraph is what a tutor reads top to bottom; the address
+    // belongs in the sentence, so it cannot be missed by someone who skims past
+    // the buttons below the list.
+    stubApi(profile())
+    renderPageWith({ VITE_CONTACT_TELEGRAM: '@Tedor_Team', VITE_CONTACT_WHATSAPP: '' })
+
+    // Twice on purpose: once in the instruction sentence, once on the button.
+    await waitFor(() => {
+      expect(screen.getAllByText('@Tedor_Team').length).toBeGreaterThanOrEqual(2)
+    })
+
+    const heading = screen.getByRole('heading', { name: /send us your documents/i })
+    const intro = heading.parentElement ?? document.body
+    expect(intro.textContent).toContain('@Tedor_Team')
+  })
+
+  it('omits the handle from the sentence when Telegram is not configured', async () => {
+    // Nothing may claim a channel that does not exist.
+    stubApi(profile())
+    renderPageWith({ VITE_CONTACT_TELEGRAM: '', VITE_CONTACT_WHATSAPP: '+44 7700 900123' })
+
+    await screen.findByRole('heading', { name: /send us your documents/i })
+    const panel = screen.getByRole('heading', { name: /send us your documents/i })
+      .closest('section') ?? document.body
+
+    expect(panel.textContent).not.toContain('@Tedor_Team')
+    expect(panel.textContent).not.toContain('Telegram')
+  })
 })
 
 // ---------------------------------------------------------------------------

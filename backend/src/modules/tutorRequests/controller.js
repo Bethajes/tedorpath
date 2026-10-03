@@ -1,4 +1,9 @@
-import { TUTOR_PROFILE_NOT_FOUND, createTutorRequest } from './service.js'
+import { setCountryCookie } from '../auth/cookies.js'
+import {
+  REFERENCE_NOT_FOUND,
+  TUTOR_PROFILE_NOT_FOUND,
+  createTutorRequest,
+} from './service.js'
 import { validateTutorRequest } from './validation.js'
 
 /**
@@ -32,9 +37,10 @@ export async function createTutorRequestHandler(req, res) {
       data: { id },
     })
   } catch (error) {
-    // A tutorProfileId that names nothing is the client's mistake, not ours, so
-    // it is a validation failure like any other field. It is reported in the
-    // same shape as a schema error so the form can highlight the field.
+    // A reference from the wizard that is well-formed but names nothing is the
+    // client's problem, not ours: the catalogue changed under a form they had
+    // open since before it did. Reported in the same shape as a schema error so
+    // the step that owns the field can highlight it.
     if (error?.code === TUTOR_PROFILE_NOT_FOUND) {
       res.status(400).json({
         success: false,
@@ -44,6 +50,18 @@ export async function createTutorRequestHandler(req, res) {
           fields: [
             { field: 'tutorProfileId', message: 'The selected tutor profile does not exist.' },
           ],
+        },
+      })
+      return
+    }
+
+    if (error?.code === REFERENCE_NOT_FOUND) {
+      res.status(400).json({
+        success: false,
+        error: {
+          code: 'VALIDATION_ERROR',
+          message: 'Invalid tutor request.',
+          fields: [{ field: error.field, message: error.message }],
         },
       })
       return

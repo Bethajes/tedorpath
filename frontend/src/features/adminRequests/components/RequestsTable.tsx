@@ -16,7 +16,7 @@ import { StatusBadge } from './StatusBadge'
  */
 function RequestedTutorCell({ item }: { item: AdminRequestListItem }) {
   if (!item.tutor) {
-    return <span className="text-slate-400">—</span>
+    return <span className="text-ink-400">—</span>
   }
 
   return (
@@ -34,11 +34,11 @@ export function RequestsTable({ items }: { items: AdminRequestListItem[] }) {
   return (
     <>
       {/* Desktop: real table, horizontally scrollable if the viewport is tight. */}
-      <div className="hidden overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm md:block">
+      <div className="hidden overflow-x-auto rounded-xl border border-ink-200 bg-white shadow-sm md:block">
         <table className="w-full min-w-[60rem] border-collapse text-left text-sm">
           <caption className="sr-only">Tutor requests, newest first</caption>
           <thead>
-            <tr className="border-b border-slate-200 bg-slate-50 text-slate-600">
+            <tr className="border-b border-ink-200 bg-ink-50 text-ink-600">
               <th scope="col" className="px-4 py-3 font-semibold">Client</th>
               <th scope="col" className="px-4 py-3 font-semibold">Requested Tutor</th>
               <th scope="col" className="px-4 py-3 font-semibold">Subject</th>
@@ -51,20 +51,20 @@ export function RequestsTable({ items }: { items: AdminRequestListItem[] }) {
           </thead>
           <tbody>
             {items.map((item) => (
-              <tr key={item.id} className="border-b border-slate-100 last:border-0 hover:bg-slate-50">
-                <th scope="row" className="px-4 py-3 font-medium text-slate-900">
+              <tr key={item.id} className="border-b border-ink-100 last:border-0 hover:bg-ink-50">
+                <th scope="row" className="px-4 py-3 font-medium text-ink-900">
                   {item.fullName}
                 </th>
                 <td className="px-4 py-3">
                   <RequestedTutorCell item={item} />
                 </td>
-                <td className="px-4 py-3 text-slate-700">{item.subject}</td>
-                <td className="px-4 py-3 text-slate-700">{item.educationLevel}</td>
-                <td className="px-4 py-3 text-slate-700">{item.learningMode}</td>
+                <td className="px-4 py-3 text-ink-700">{item.subject}</td>
+                <td className="px-4 py-3 text-ink-700">{item.educationLevel}</td>
+                <td className="px-4 py-3 text-ink-700">{item.learningMode}</td>
                 <td className="px-4 py-3">
                   <StatusBadge status={item.status} />
                 </td>
-                <td className="whitespace-nowrap px-4 py-3 text-slate-600">
+                <td className="whitespace-nowrap px-4 py-3 text-ink-600">
                   {formatWhen(item.createdAt).label}
                 </td>
                 <td className="px-4 py-3">
@@ -84,11 +84,11 @@ export function RequestsTable({ items }: { items: AdminRequestListItem[] }) {
       {/* Mobile: card per request. */}
       <ul className="flex flex-col gap-3 md:hidden">
         {items.map((item) => (
-          <li key={item.id} className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+          <li key={item.id} className="rounded-xl border border-ink-200 bg-white p-4 shadow-sm">
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
-                <p className="truncate font-semibold text-slate-900">{item.fullName}</p>
-                <p className="mt-0.5 text-sm text-slate-600">
+                <p className="truncate font-semibold text-ink-900">{item.fullName}</p>
+                <p className="mt-0.5 text-sm text-ink-600">
                   {item.subject} · {item.educationLevel}
                 </p>
               </div>
@@ -98,7 +98,7 @@ export function RequestsTable({ items }: { items: AdminRequestListItem[] }) {
             {/* Shown on mobile too: a request routed to a tutor must not lose
                 that fact just because the screen is small. */}
             <div className="mt-3">
-              <p className="text-sm text-slate-500">Requested tutor</p>
+              <p className="text-sm text-ink-500">Requested tutor</p>
               <p className="mt-0.5 text-sm">
                 <RequestedTutorCell item={item} />
               </p>
@@ -106,17 +106,17 @@ export function RequestsTable({ items }: { items: AdminRequestListItem[] }) {
 
             <dl className="mt-3 grid grid-cols-2 gap-x-3 gap-y-1 text-sm">
               <div>
-                <dt className="text-slate-500">Learning mode</dt>
-                <dd className="text-slate-800">{item.learningMode}</dd>
+                <dt className="text-ink-500">Learning mode</dt>
+                <dd className="text-ink-800">{item.learningMode}</dd>
               </div>
               <div>
-                <dt className="text-slate-500">Created</dt>
-                <dd className="text-slate-800">{formatWhen(item.createdAt).label}</dd>
+                <dt className="text-ink-500">Created</dt>
+                <dd className="text-ink-800">{formatWhen(item.createdAt).label}</dd>
               </div>
             </dl>
             <Link
               to={`/admin/requests/${item.id}`}
-              className="mt-3 inline-flex w-full items-center justify-center rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-800"
+              className="mt-3 inline-flex w-full items-center justify-center rounded-lg border border-ink-300 px-3 py-2 text-sm font-medium text-ink-800"
             >
               View request
             </Link>

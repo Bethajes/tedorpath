@@ -141,7 +141,7 @@ export function AdminRequestDetailPage() {
       {loading ? (
         <p
           role="status"
-          className="rounded-xl border border-slate-200 bg-white p-6 text-sm text-slate-600 shadow-sm"
+          className="rounded-xl border border-ink-200 bg-white p-6 text-sm text-ink-600 shadow-sm"
         >
           Loading request…
         </p>
@@ -182,10 +182,10 @@ export function AdminRequestDetailPage() {
           */}
           {record.tutor ? (
             <div className="rounded-xl border border-brand-200 bg-brand-50/60 p-5">
-              <p className="text-sm font-semibold text-slate-900">
+              <p className="text-sm font-semibold text-ink-900">
                 Requested tutor: {record.tutor.displayName}
               </p>
-              <p className="mt-1 text-sm text-slate-700">{record.tutor.headline}</p>
+              <p className="mt-1 text-sm text-ink-700">{record.tutor.headline}</p>
               <div className="mt-3 flex flex-wrap items-center gap-3">
                 <Link
                   to={`/admin/tutors/${record.tutor.id}`}
@@ -193,15 +193,15 @@ export function AdminRequestDetailPage() {
                 >
                   Open their profile
                 </Link>
-                <span className="text-sm text-slate-600">
+                <span className="text-sm text-ink-600">
                   Status: {record.tutor.profileStatus.replace(/_/g, ' ').toLowerCase()}
                 </span>
               </div>
             </div>
           ) : (
-            <div className="rounded-xl border border-slate-200 bg-slate-50 p-5">
-              <p className="text-sm font-semibold text-slate-900">No tutor chosen</p>
-              <p className="mt-1 text-sm text-slate-600">
+            <div className="rounded-xl border border-ink-200 bg-ink-50 p-5">
+              <p className="text-sm font-semibold text-ink-900">No tutor chosen</p>
+              <p className="mt-1 text-sm text-ink-600">
                 This request came from the general form, so it needs matching against the tutor
                 directory.
               </p>
@@ -209,7 +209,7 @@ export function AdminRequestDetailPage() {
           )}
           <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
             <DetailSection title="Client Information">
-              <dl className="mt-2 divide-y divide-slate-100">
+              <dl className="mt-2 divide-y divide-ink-100">
                 <DetailRow label="Full name" value={record.fullName} />
                 <DetailRow label="Phone" value={record.phone} />
                 <DetailRow label="Telegram" value={record.telegramUsername} />
@@ -218,7 +218,7 @@ export function AdminRequestDetailPage() {
             </DetailSection>
 
             <DetailSection title="Request Information">
-              <dl className="mt-2 divide-y divide-slate-100">
+              <dl className="mt-2 divide-y divide-ink-100">
                 <DetailRow
                   label="Status"
                   value={<StatusBadge status={record.status} />}
@@ -230,17 +230,63 @@ export function AdminRequestDetailPage() {
           </div>
 
           <DetailSection title="Learning Requirements">
-            <dl className="mt-2 grid grid-cols-1 gap-x-6 divide-y divide-slate-100 sm:grid-cols-2 sm:divide-y-0">
+            <dl className="mt-2 grid grid-cols-1 gap-x-6 divide-y divide-ink-100 sm:grid-cols-2 sm:divide-y-0">
               <div className="sm:col-span-2">
                 <DetailRow label="Description" value={record.description} />
               </div>
-              <DetailRow label="Subject" value={record.subject} />
+              {/*
+                `subject` is the readable summary the service composes from the
+                chosen subjects, so it already reads as a list. `subjects` is the
+                same information from the join table and is preferred when
+                present: it is the queryable one, and it is empty on a request
+                from before the wizard, which is exactly when the summary is all
+                there is.
+              */}
+              <DetailRow
+                label="Subjects"
+                value={
+                  record.subjects.length > 0
+                    ? record.subjects.join(', ')
+                    : record.subject
+                }
+              />
               <DetailRow label="Education level" value={record.educationLevel} />
+              <DetailRow
+                label="Main goal"
+                value={
+                  record.learningGoalOther
+                    ? `${record.learningGoal ?? ''} — ${record.learningGoalOther}`.trim()
+                    : record.learningGoal
+                }
+              />
               <DetailRow label="Learning mode" value={record.learningMode} />
               <DetailRow label="Location" value={record.location} />
-              <DetailRow label="Preferred days" value={record.preferredDays} />
-              <DetailRow label="Preferred time" value={record.preferredTime} />
-              <DetailRow label="Budget" value={record.budget} />
+              <DetailRow
+                label="Availability"
+                value={
+                  [record.preferredDays, record.preferredTime].filter(Boolean).join(' · ') ||
+                  null
+                }
+              />
+              {/*
+                The timezone is shown next to the times, not in the client
+                section, because that is the only reading of it that matters: an
+                admin deciding whether 18:00 is workable needs to know which 18:00
+                it is.
+              */}
+              <DetailRow label="Schedule timezone" value={record.timezone} />
+              <DetailRow
+                label="Budget"
+                // Amount and currency are separate on the wire and are shown
+                // together here. An admin reading "450" with no currency would
+                // have no idea whether to quote birr or dollars.
+                value={
+                  record.budgetAmount !== null && record.budgetCurrency
+                    ? `${record.budgetAmount} ${record.budgetCurrency}`
+                    : record.budget
+                }
+              />
+              <DetailRow label="Country" value={record.countryCode} />
               <div className="sm:col-span-2">
                 <DetailRow label="Additional information" value={record.additionalInfo} />
               </div>
@@ -273,7 +319,7 @@ export function AdminRequestDetailPage() {
           <DetailSection title="Update Status" description="Status changes are manual — nothing moves automatically.">
             <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-end">
               <div className="flex flex-col gap-1.5">
-                <label htmlFor="status-select" className="text-sm font-medium text-slate-800">
+                <label htmlFor="status-select" className="text-sm font-medium text-ink-800">
                   Status
                 </label>
                 <Select

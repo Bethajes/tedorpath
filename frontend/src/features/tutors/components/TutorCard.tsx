@@ -5,6 +5,7 @@ import { cn } from '@/lib/cn'
 import { resolveImageUrl } from '@/lib/api'
 
 import { TEACHING_MODE_LABELS } from '../tutors.types'
+import { primaryRate } from '../formatRate'
 import type { TutorCardDTO } from '../tutors.types'
 
 /**
@@ -282,19 +283,25 @@ export function TutorCard({ tutor, className, variant = 'row' }: TutorCardProps)
 
   /*
     One <dd>, not one per fragment: the rate is a single value, and splitting
-    "25" from "per hour" would leave the text content as "25per hour" for
-    anything reading the card as text. The `{' '}` is explicit so the space
-    survives JSX's line-trimming.
+    "900.00 ETB" from "per hour" would leave the text content as "900.00 ETBper
+    hour" for anything reading the card as text.
+
+    One rate, for one market. The card used to also print the tutor's price in
+    the other market, which put two numbers on screen for the same hour of
+    teaching and left the visitor to work out which one they would be charged.
+    A visitor who wants another market changes it with the selector, and the whole
+    page — every card — re-prices together.
   */
-  const rateRow = tutor.hourlyRate !== null && (
+  const rate = primaryRate(tutor)
+
+  const rateRow = rate !== null && (
+    // One row, and nothing about the other market. A card stays silent about
+    // students entirely, which is a rule the homepage enforces because a student
+    // count on a tutor card is a claim the API never made.
     <div className="flex items-baseline">
       <dt className="sr-only">Hourly rate</dt>
       <dd className="text-xl font-bold tracking-[-0.01em] text-ink-900">
-        {/*
-          No currency symbol: the API sends a bare number and no currency
-          field, so printing "$" or "ETB" here would be inventing data.
-        */}
-        <span>{tutor.hourlyRate}</span>{' '}
+        <span>{rate}</span>{' '}
         <span className="text-sm font-normal text-ink-500">per hour</span>
       </dd>
     </div>
@@ -302,13 +309,13 @@ export function TutorCard({ tutor, className, variant = 'row' }: TutorCardProps)
 
   const cta = (
     <Link
+      // Carries the market so the profile page shows the rate this card showed,
+      // rather than re-guessing from the recipient's own signals.
       to={`/tutors/${encodeURIComponent(tutor.id)}`}
       className={cn(
         'inline-flex w-full items-center justify-center gap-2 rounded-lg font-medium text-white shadow-sm transition-colors',
         isRow ? 'px-4 py-3 text-[0.95rem]' : 'px-4 py-2.5 text-[0.95rem]',
-        tutor.hourlyRate !== null
-          ? 'bg-accent-500 hover:bg-accent-600'
-          : 'bg-brand-600 hover:bg-brand-700',
+        rate !== null ? 'bg-accent-500 hover:bg-accent-600' : 'bg-brand-600 hover:bg-brand-700',
       )}
     >
       View Profile

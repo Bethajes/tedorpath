@@ -14,7 +14,8 @@ incoming requests.
 | Area | Status |
 | --- | --- |
 | Public website (home, about, contact, 404) | Done |
-| Client request form at `/request-tutor` | Done, with client-side validation |
+| Client request wizard at `/request-tutor` | Done — 11 steps, adaptive on country |
+| Database-driven countries, currencies, curricula, subjects | Done |
 | `POST /api/tutor-requests` + PostgreSQL persistence | Done |
 | Admin dashboard (`/admin`) | Done, **development-only access** |
 | User accounts, sessions, sign-in / sign-up pages | Done, email + password |
@@ -25,7 +26,8 @@ incoming requests.
 Full working flow today:
 
 ```
-Client submits form  ->  POST /api/tutor-requests  ->  validated  ->  PostgreSQL
+Client opens /request-tutor ->  GET /api/onboarding/config  ->  wizard renders
+Client answers 11 steps   ->  POST /api/tutor-requests    ->  validated  ->  PostgreSQL
 Admin opens /admin   ->  sees it as NEW  ->  changes status  ->  adds internal notes
 Visitor signs up     ->  POST /api/auth/register  ->  user + credentials account
                       ->  session row  ->  HttpOnly cookie  ->  navbar shows their name
@@ -206,6 +208,7 @@ Then install, set up the database and start:
 ```bash
 npm install        # also runs `prisma generate` automatically
 npm run setup      # prisma generate + apply migrations
+npm run db:seed    # reference data + demo tutors
 npm run dev        # http://localhost:4000
 ```
 
@@ -215,6 +218,31 @@ Check it is alive:
 curl http://localhost:4000/api/health
 # {"success":true,"data":{"status":"ok"}}
 ```
+
+### Reference data
+
+`npm run setup` creates the schema. It does **not** populate it. Only the two
+`markets` rows come from a migration — the 68 countries, 61 currencies, the
+education systems and levels, the 42 subjects and the 7 learning goals are all
+written by `npm run db:seed`, which the request wizard, the subject list and the
+tutor directory cannot work without.
+
+So on any new environment, migrations alone are not enough:
+
+```bash
+npm run setup && npm run db:seed
+```
+
+On **production**, `db:seed` refuses to run by default, because it also creates
+demo tutors. To provision reference data there, acknowledge it explicitly — the
+demo tutors are still never created:
+
+```bash
+NODE_ENV=production node prisma/seed.js --allow-production
+```
+
+Both halves use upserts, so re-running is safe and only ever fills in what is
+missing.
 
 ---
 
@@ -281,7 +309,9 @@ backend/
   src/middleware/adminAuth.js       admin guard (dev-only token)
   src/modules/auth/                 register/login/logout/me, sessions, Argon2id, Google OAuth
   src/modules/tutorRequests/        public submission endpoint
+  src/modules/onboarding/          GET /api/onboarding/config (reference data) and /market
   src/modules/adminRequests/        admin read/update/delete endpoints
+  prisma/onboardingConfigData.js   reference data used by the seed (countries, levels, subjects)
   src/routes/health.js              GET /api/health
   tests/                            API tests (node:test)
 
@@ -293,7 +323,7 @@ frontend/
   src/components/ui/                Button, Input, Select, Textarea, Field, Card, Alert
   src/components/layout/            public Navbar/Footer/PageShell, admin AdminShell
   src/components/home/              homepage sections + subject catalogue
-  src/features/tutorRequest/        public form, Zod schema, API call
+  src/features/tutorRequest/        the wizard: steps, stepper, choice groups, review, schema
   src/features/auth/                auth store, provider, guard, sign-in/up pages
   src/features/adminRequests/       admin API, types, components
   src/pages/                        all route components
@@ -310,10 +340,243 @@ colours in the mark (`#1E96E8`, `#F5801F`) are mirrored by the `brand-*` and
 
 The homepage discovery panel and the subject cards are **discovery UI, not a
 matching engine**. They carry the visitor's choices to `/request-tutor` as
-`?subject=&level=&mode=`, where they become the form's starting values. Any
-value that is not one of the accepted `SUBJECTS` / `EDUCATION_LEVELS` /
-`LEARNING_MODES` entries is ignored, so a hand-edited URL cannot put the form
-into an invalid state.
+`?subject=&level=&mode=`, where they become the wizard's starting values. The
+wizard resolves the subject and the level against its own catalogue, so a link
+to a subject added after those links were built still works; a value matching
+nothing is simply not pre-filled, which a hand-edited URL cannot turn into an
+invalid answer. Only the teaching mode is checked against a fixed list, because
+it is a delivery method with exactly three values rather than catalogue content.
+
+---
+
+## The adaptive tutor-request wizard
+
+`/request-tutor` is an eleven-step wizard rather than one long form. It is
+built around a single question — *what country is this person in?* — because the
+answer to that decides everything downstream: which currency a budget is quoted
+in, which timezone lessons are scheduled in, which education levels are offered,
+and which subjects are suggested first.
+
+### The flow
+
+| # | Step | Collected |
+| --- | --- | --- |
+| 1 | Country | Which country, which selects the currency, timezone and curriculum |
+| 2 | Education level | From that country's curriculum, grouped by stage |
+| 3 | Subjects | Multiple, with the level's subjects suggested first, plus "Other" |
+| 4 | Main goal | Grades, exams, homework, skills, university prep, professional, other |
+| 5 | Teaching mode | Online, in person, or either |
+| 6 | Location | Required only when a tutor could turn up in a room |
+| 7 | Availability | Days, time ranges, and the timezone they are expressed in |
+| 8 | Budget | An amount **and** a currency, always as two fields |
+| 9 | About the learner | What they need help with, and anything else |
+| 10 | Your details | Name and phone, plus optional email and Telegram |
+| 11 | Review | Everything above, with an Edit link per section |
+
+Step 10 is the one addition to the specified flow. The API has always required a
+name and a phone number, and there is nowhere sensible to collect them inside the
+ten steps above, so they get a step of their own between the last question and
+the review.
+
+### Configuration lives in the database
+
+Nothing in the wizard is a list in React. `GET /api/onboarding/config` returns
+the whole configuration in one document, and each part is a table:
+
+| Table | Holds | Notes |
+| --- | --- | --- |
+| `currencies` | ISO 4217 codes, names, symbols, decimal places | What the budget field is labelled with |
+| `countries` | Code, currency, timezone, education system | ISO 3166-1 alpha-2 |
+| `education_systems` | A named curriculum | `isDefault` is the fallback for countries without their own |
+| `education_levels` | Stages within a curriculum, with `aliases` | Aliases keep older links resolving after a rename |
+| `education_level_subjects` | Which subjects a level usually covers | Suggestions, never a limit |
+| `learning_goals` | Why someone is asking | Configurable, like everything else |
+| `subjects` | The existing catalogue | Extended from 10 rows to 34 |
+
+Adding a country, a currency or a curriculum is therefore a data change an
+operator makes; it reaches the form on the next page load with no deploy. A
+country with no configuration of its own inherits the generic international
+system, so adding a country never means inventing its grades first.
+
+The indirection through `education_systems` is the important part: the wizard
+never branches on a country code, it follows `country → educationSystem →
+levels`. Giving a third country its own structure means adding a row, not
+changing application code.
+
+### Money and time are never converted
+
+This is the rule the whole budget step is built around, and it is enforced in
+three places:
+
+- **The database** refuses to hold `budgetAmount` without `budgetCurrency`
+  (`CHECK` constraint), so a number whose unit is a guess cannot be stored.
+- **The API** rejects the same pairing, and never applies an exchange rate.
+  No rate is stored anywhere in the codebase.
+- **The form** sends the two as separate fields, and when a client changes their
+  country after typing an amount it does *not* rescale the number. It says what
+  changed, shows the amount it still holds, and offers both currencies.
+
+The currency code is shown next to every amount rather than a symbol alone:
+`$` is shared by a dozen countries, and a budget nobody can read back correctly is
+worse than one that looks slightly technical.
+
+Availability works the same way. The client's timezone is stored verbatim and
+never converted to ours, so an admin reading "18:00" can see which 18:00 it is.
+The field is prefilled from the country and stays editable, and the browser's own
+timezone is offered as a one-click correction rather than applied automatically —
+a device can be set to the wrong zone, and a scheduling timezone nobody chose is
+worse than one they did.
+
+### Tutor rates are stated per market, not converted
+
+Tedor Tutors serves Ethiopian learners, who think in birr, and learners elsewhere,
+who think in dollars. A tutor states what an hour of their teaching costs in **each**
+market, and neither number is derived from the other.
+
+There is **no exchange rate anywhere in this codebase**, and that is the whole
+point: a converted price is a price nobody agreed to charge. A tutor who would
+take 500 birr for an hour in Addis has not said they would take 6 dollars for it,
+so the tutor states both — or states one and leaves the other empty, which is
+entirely normal and is what the directory reports rather than guessing at.
+
+Rates are **rows, not columns**:
+
+| Table | Holds |
+| --- | --- |
+| `markets` | The markets the platform sells in: code, name, currency, and which one is the default |
+| `tutor_profile_rates` | One row per (tutor, market): the price that tutor charges in that market |
+
+A rate-per-column schema would mean a database migration every time a market is
+added, plus a field in the validation schema, the API payload, the wizard's form
+type and two components. The registry is the reason a third market is a row:
+
+```sql
+INSERT INTO markets (code, name, currency_name, symbol, decimals, is_default, sort_order)
+VALUES ('EUR', 'Europe', 'Euro', '€', 2, false, 2);
+```
+
+`market.code` is a real foreign key to `currencies.code`, so a market cannot name a
+currency the platform has never heard of. `markets.is_default` is the market served
+to a visitor who has said nothing — **not** the same idea as `currencies.is_default`,
+which is about the platform's primary currency. They point opposite ways today: ETB
+is the primary currency and sorts first, USD is the default market. Inheriting one
+from the other would show every unmarked visitor prices in birr.
+
+The migration that introduced these tables copied the existing `hourlyRateEtb` and
+`hourlyRateUsd` values before dropping them. The old single `hourlyRate` column was
+dropped rather than backfilled: it held a bare number whose unit was never recorded,
+so its currency cannot be recovered, and copying it would be a guess.
+
+`GET /api/tutors` and `GET /api/tutors/:id` take a `market` parameter, which decides
+three things: the row results are filtered on, the order they are sorted in, and the
+price each card shows. `minRate=10` is a different question for someone in Addis than
+for someone in London, so the filter and the displayed price are held to the same
+market — filtering one market while showing another's prices would quietly return the
+wrong tutors.
+
+Sorting by price is the one place raw SQL is used (`rankedProfileIds`): Prisma cannot
+order by a relation, only by columns on the model. Every filter and the count stay in
+Prisma; only the ordering is hand-written, and the direction is built from a boolean
+rather than interpolated.
+
+### One price at a time
+
+Public responses carry a single price and its market:
+
+```json
+{ "hourlyRate": 900, "hourlyRateCurrency": "ETB" }
+```
+
+There is deliberately no second price. An earlier version returned both the birr and
+the dollar rate so a card could show "also 500 ETB for local students". That is a true
+fact about the tutor and a bad thing to put in front of a learner: two numbers for the
+same hour of teaching, with no way to tell which one they would be charged. A client
+that holds both prices is one layout change away from showing them.
+
+So the API does not send both, and the visitor changes market with the selector —
+`Prices shown for 🇪🇹 Ethiopia  Change` — which re-prices every card, the rate range
+filter and the sort at once, because all three are held to the same market.
+
+The tutor's **own** profile is the exception: `GET /api/tutor-profile/me` returns
+every market, because a tutor editing prices needs to see the ones they set. That
+response goes to nobody else.
+
+### What a tutor may state
+
+Rates must be **greater than zero**. Zero used to be accepted on the theory that a
+free first lesson is a stated price; it is not. A zero rate sorts above every other
+tutor, filters under every budget, and reads as free lessons nobody offered. A tutor
+who wants to offer something unusual leaves that market unpriced instead, and the
+directory reports no rate rather than `0`.
+
+Declining a market is normal and blocks nothing: a tutor priced in one market is a
+valid profile, and the completeness check at submit only requires at least one price.
+
+### How a client's market is worked out
+
+In order of how much the visitor has actually said:
+
+| Source | Notes |
+| --- | --- |
+| **Their choice** | The selector, or a country on the request form — remembered in `sessionStorage` for the visit |
+| **Their platform** | `GET /api/onboarding/market`, reading the country header the CDN already sets (`CF-IPCountry`, `X-Vercel-IP-Country`, …) |
+| **Their device** | `Africa/Addis_Ababa` means Ethiopia; anything else means the default market |
+| **The default** | Whichever market the `markets` table marks `is_default` — currently dollars |
+
+Every candidate is validated against the registry before it is used, so a stored or
+detected code for a market that has since been withdrawn falls through to the next
+source rather than producing a page whose every price is missing.
+
+There is no third-party geolocation request and no GeoIP database: the hosting
+platform already knows the requester's country and sets it in a header. Those headers
+are spoofable, which is why the answer can only ever choose between real prices a tutor
+published. The worst a forged header achieves is showing someone the dollar rate
+instead of the birr rate.
+
+Cards and profile links carry `?market=`, so a shared link shows the recipient the
+prices the sender saw, and a card can never link to a page that prices the same tutor
+differently. A hand-edited `?market=EUR` is ignored on a profile and rejected with a
+400 on the directory, rather than turning a page view into an error.
+
+### The older `hourlyRateEtb` / `hourlyRateUsd` request shape
+
+The tutor profile API still accepts the pre-markets pair alongside the `rates` map:
+
+```json
+{ "rates": { "ETB": 900, "USD": 12 } }   // current
+{ "hourlyRateEtb": 900, "hourlyRateUsd": 12 }   // still accepted
+```
+
+Both are folded into the same map at the service boundary, so nothing else in the
+backend knows the older shape existed. This is what keeps a bundle already in a
+tutor's browser cache working; the response keeps both shapes too, derived from the
+same rows so an old client and a new one can never be told different prices for the
+same tutor.
+
+### Backward compatibility
+
+The wizard and the original single-page form are both live clients of the same
+endpoint, and every column the wizard adds to `tutor_requests` is nullable with a
+default. A request from the old form still validates, still stores, and reads as
+`null` for everything new — which is honest, because nobody asked.
+
+Both request shapes end up in the same two text columns:
+
+| Sent | Stored |
+| --- | --- |
+| `subject: "Mathematics"` | `subject`, and no join rows |
+| `subjectIds: [a, b, c]` | `subject: "Mathematics, Physics, Chemistry"`, plus join rows |
+| `educationLevel: "University"` | `educationLevel` |
+| `educationLevelCode: "eth-university"` | `educationLevel: "University or College"`, resolved from the database |
+| `preferredDays: "Monday"` | `preferredDays` |
+| `preferredDayNames: ["Monday", "Wednesday"]` | `preferredDays: "Monday and Wednesday"`, plus the array |
+| `budget: "$20 per hour"` | `budget`, verbatim |
+| `budgetAmount: 450, budgetCurrency: "ETB"` | `budget: "450 ETB"`, plus both columns |
+
+The legacy columns stay as the single readable summary the admin list and detail
+screen already read, and resolving identifiers to names in the service layer is
+what stops the two paths drifting into meaning different things under the same
+column.
 
 ---
 
@@ -324,6 +587,9 @@ into an invalid state.
 | Method | Path | Notes |
 | --- | --- | --- |
 | `GET` | `/api/health` | Liveness check |
+| `GET` | `/api/onboarding/config` | Countries, currencies, timezones, curricula, subjects, goals |
+| `GET` | `/api/onboarding/market` | A market code from the registry, chosen from the platform's country header |
+| `GET` | `/api/subjects` | The subject catalogue, flat, active only |
 | `POST` | `/api/tutor-requests` | Submit a request. `201` returns `{ id }` |
 
 ### Authentication

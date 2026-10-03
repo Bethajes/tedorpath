@@ -496,6 +496,112 @@ describe('GET /api/admin/tutor-requests/:id', () => {
   })
 })
 
+/**
+ * What the adaptive wizard collects, as an admin reads it.
+ *
+ * An admin triaging the queue needs three of these more than they need the rest:
+ * the country (which decides the currency of any budget quoted), the timezone
+ * (which decides whether "18:00" is workable), and the goal (which decides who to
+ * send). If the detail endpoint quietly omitted any of them, the request would be
+ * unreadable for the purpose it was submitted for.
+ */
+describe('the wizard\'s fields reach the admin detail view', () => {
+  it('reports the country, timezone, goal, subjects and split budget', async () => {
+    const catalogue = await prisma.subject.findMany({ orderBy: { name: 'asc' }, take: 2 })
+
+    const id = await seedRequest({
+      fullName: 'Wizard Person',
+      subject: undefined,
+      educationLevel: undefined,
+      budget: undefined,
+      subjectIds: catalogue.map((subject) => subject.id),
+      educationLevelCode: 'eth-grade-9-10',
+      countryCode: 'ET',
+      timezone: 'Africa/Addis_Ababa',
+      learningGoal: 'exam-preparation',
+      preferredDayNames: ['Monday', 'Wednesday'],
+      preferredTimeRanges: ['16:00-18:00'],
+      budgetAmount: 450,
+      budgetCurrency: 'ETB',
+    })
+
+    const { status, body } = await api(`/api/admin/tutor-requests/${id}`)
+
+    assert.equal(status, 200)
+    assert.equal(body.data.countryCode, 'ET')
+    assert.equal(body.data.timezone, 'Africa/Addis_Ababa')
+    assert.equal(body.data.learningGoal, 'exam-preparation')
+    assert.equal(body.data.educationLevelCode, 'eth-grade-9-10')
+    assert.equal(body.data.educationLevel, 'Grades 9–10')
+    assert.deepEqual(
+      [...body.data.subjects].sort(),
+      catalogue.map((subject) => subject.name).sort(),
+    )
+    assert.deepEqual(body.data.preferredDayNames, ['Monday', 'Wednesday'])
+    assert.deepEqual(body.data.preferredTimeRanges, ['16:00-18:00'])
+    assert.equal(body.data.preferredDays, 'Monday and Wednesday')
+    assert.equal(body.data.budgetCurrency, 'ETB')
+  })
+
+  it('sends the budget amount as a number, not as a decimal string', async () => {
+    // Decimal.js serialises as a string. An admin UI formatting a quoted amount
+    // would then read it as text and lose the number entirely, so the value is
+    // converted on the way out.
+    const id = await seedRequest({
+      fullName: 'Decimal Person',
+      subject: 'Physics',
+      educationLevel: 'High School',
+      // No free-text budget: the split fields are the whole answer here, and an
+      // explicit sentence would take precedence over them.
+      budget: undefined,
+      budgetAmount: 750.5,
+      budgetCurrency: 'USD',
+    })
+
+    const { body } = await api(`/api/admin/tutor-requests/${id}`)
+
+    assert.equal(typeof body.data.budgetAmount, 'number')
+    assert.equal(body.data.budgetAmount, 750.5)
+    assert.equal(body.data.budgetCurrency, 'USD')
+    assert.equal(body.data.budget, '750.5 USD')
+  })
+
+  it('reports the wizard fields as empty on a request made before it existed', async () => {
+    const id = await seedRequest({ fullName: 'Legacy Person' })
+
+    const { body } = await api(`/api/admin/tutor-requests/${id}`)
+
+    // Null rather than a fabricated default: an old request says nothing about
+    // the client\'s country, and inventing one would be a lie in the record.
+    assert.equal(body.data.countryCode, null)
+    assert.equal(body.data.timezone, null)
+    assert.equal(body.data.learningGoal, null)
+    assert.equal(body.data.budgetAmount, null)
+    assert.equal(body.data.budgetCurrency, null)
+    assert.deepEqual(body.data.subjects, [])
+    assert.deepEqual(body.data.preferredDayNames, [])
+    assert.deepEqual(body.data.preferredTimeRanges, [])
+  })
+
+  it('returns the same shape from PATCH as from GET', async () => {
+    // The two endpoints share a screen. If PATCH answered with the raw joined
+    // columns while GET answered with the flattened ones, the admin UI would have
+    // to handle both shapes for the same record.
+    const id = await seedRequest({ fullName: 'Shape Person', budgetAmount: 100, budgetCurrency: 'ETB' })
+
+    const before = (await api(`/api/admin/tutor-requests/${id}`)).body.data
+    const patched = await api(`/api/admin/tutor-requests/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ status: 'CONTACTED' }),
+    })
+
+    assert.equal(patched.status, 200)
+    assert.deepEqual(Object.keys(patched.body.data).sort(), Object.keys(before).sort())
+    assert.equal(patched.body.data.tutor, before.tutor)
+    assert.deepEqual(patched.body.data.subjects, before.subjects)
+  })
+})
+
 describe('PATCH /api/admin/tutor-requests/:id', () => {
   it('walks the status through the full workflow', async () => {
     const id = await seedRequest({ fullName: 'Workflow Person' })

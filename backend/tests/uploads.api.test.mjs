@@ -213,12 +213,19 @@ describe('POST /api/tutor-profile/photo', () => {
   it('reports the missing profile instead of failing silently (Req 17.3)', async () => {
     const { token } = await createUser()
 
+    // Compared before and after rather than against an empty directory: every
+    // test in this file shares one temporary upload directory, so `[]` would be
+    // asserting that the earlier tests cleaned up after themselves — see
+    // `isOnDisk` for the same rule. What is actually being claimed is that this
+    // request wrote nothing.
+    const before = await uploadDirContents()
+
     const res = await uploadPhoto(token, PNG_BYTES)
 
     assert.equal(res.status, 404)
     assert.equal(res.body.error.code, 'PROFILE_NOT_FOUND')
     assert.match(res.body.error.message, /Start your tutor profile/)
-    assert.deepEqual(await readdir(uploadDir), [])
+    assert.deepEqual(await uploadDirContents(), before, 'a rejected upload must not write a file')
   })
 
   it('rejects a file whose bytes are not an image, whatever it claims to be', async () => {
@@ -270,12 +277,19 @@ describe('POST /api/tutor-profile/photo', () => {
     // it streams, so this never reaches the byte sniffing.
     const oversized = Buffer.concat([PNG_BYTES, Buffer.alloc(MAX_PHOTO_BYTES + 1024)])
 
+    // Before and after, for the same reason as the missing-profile case above.
+    const before = await uploadDirContents()
+
     const res = await uploadPhoto(token, oversized)
 
     assert.equal(res.status, 413)
     assert.equal(res.body.error.code, 'FILE_TOO_LARGE')
     assert.equal((await storedPhotoOf(userId)).profilePhotoUrl, null)
-    assert.deepEqual(await readdir(uploadDir), [])
+    assert.deepEqual(
+      await uploadDirContents(),
+      before,
+      'a file rejected on size must not reach the disk, even partially',
+    )
   })
 
   it('names the stored file itself rather than trusting the uploaded name', async () => {
@@ -293,16 +307,26 @@ describe('POST /api/tutor-profile/photo', () => {
   it('replaces the previous photo and deletes the file it superseded', async () => {
     const { userId, token } = await createUserWithProfile()
 
+    // The first upload lands in the directory every other test also writes to, so
+    // the assertion below is about this pair of names rather than about the whole
+    // directory: an exact directory listing would be asserting the other tests'
+    // cleanup as well as this one.
     const first = await uploadPhoto(token, PNG_BYTES)
     const firstName = path.basename(first.body.data.profilePhotoUrl)
     const second = await uploadPhoto(token, GIF_BYTES)
+    const secondName = path.basename(second.body.data.profilePhotoUrl)
 
     assert.equal(second.status, 201)
     assert.notEqual(second.body.data.profilePhotoUrl, first.body.data.profilePhotoUrl)
     assert.equal((await storedPhotoOf(userId)).profilePhotoUrl, second.body.data.profilePhotoUrl)
 
-    // The superseded upload is gone rather than accumulating on disk forever.
-    assert.deepEqual(await readdir(uploadDir), [path.basename(second.body.data.profilePhotoUrl)])
+    /*
+     * The superseded upload is gone rather than accumulating on disk forever: the
+     * new file is there and the old one is not.
+     */
+    const onDisk = await uploadDirContents()
+    assert.ok(onDisk.includes(secondName), 'the replacement should be stored')
+    assert.ok(!onDisk.includes(firstName), 'the superseded file should be deleted')
     await assert.rejects(() => readFile(path.join(uploadDir, firstName)))
   })
 

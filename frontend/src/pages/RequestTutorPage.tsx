@@ -1,8 +1,10 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 
 import { Container, PageShell } from '@/components/layout/PageShell'
-import { TutorRequestForm } from '@/features/tutorRequest/TutorRequestForm'
+import { TutorRequestWizard } from '@/features/tutorRequest/TutorRequestWizard'
+import { TutorRequestSuccess } from '@/features/tutorRequest/TutorRequestSuccess'
+import { primaryRate } from '@/features/tutors/formatRate'
 import { getTutor } from '@/features/tutors/tutors.api'
 import type { TutorDetailDTO } from '@/features/tutors/tutors.types'
 import { parseTutorRequestPrefill } from '@/lib/tutorRequestQuery'
@@ -34,12 +36,18 @@ export function RequestTutorPage() {
     parseTutorRequestPrefill(searchParams.toString())
 
   const [resolution, setResolution] = useState<TutorResolution | null>(null)
+  const [submitted, setSubmitted] = useState(false)
 
-  useEffect(() => {
+  // The wizard owns the flow once it has loaded; the page owns the tutor's
+  // identity, which the wizard carries through to the API as an id.
+  const loadTutor = useCallback(() => {
     if (!tutorProfileId) return
 
     let cancelled = false
 
+    // No market is sent or needed: the server prices this tutor for whoever is
+    // asking, using the same account, cookie and network it priced the directory
+    // with, so this panel and the profile page next door cannot disagree.
     getTutor(tutorProfileId)
       .then((tutor) => {
         if (!cancelled) setResolution({ forId: tutorProfileId, state: { kind: 'ready', tutor } })
@@ -57,7 +65,16 @@ export function RequestTutorPage() {
     return () => {
       cancelled = true
     }
+    // Just the id. The market used to be a dependency here, because the panel
+    // asked for one and had to be re-fetched when it resolved — two loads of the
+    // same tutor to settle on which of two prices to show, and a brief window
+    // showing neither.
   }, [tutorProfileId])
+
+  // Fetching in an effect is synchronising with an external system (our API).
+  useEffect(() => {
+    loadTutor()
+  }, [loadTutor])
 
   /*
    * Derived during render rather than reset in an effect.
@@ -74,10 +91,30 @@ export function RequestTutorPage() {
       ? resolution.state
       : { kind: 'loading' }
 
+  /*
+   * The rate to name here is the one for the visitor's own market.
+   *
+   * This panel is shown before they have chosen a country on the wizard below it,
+   * so it is resolved from the same signals every other tutor surface uses. Once
+   * they pick Ethiopia in step 1 the market is remembered and the directory they
+   * go to next prices in birr too.
+   */
+  const clientRate = tutorState.kind === 'ready' ? primaryRate(tutorState.tutor) : null
+
   const carriedOver: { label: string; value: string }[] = []
   if (subject) carriedOver.push({ label: 'Subject', value: subject })
   if (educationLevel) carriedOver.push({ label: 'Level', value: educationLevel })
   if (learningMode) carriedOver.push({ label: 'Learning mode', value: learningMode })
+
+  if (submitted) {
+    return (
+      <PageShell>
+        <Container className="max-w-3xl">
+          <TutorRequestSuccess />
+        </Container>
+      </PageShell>
+    )
+  }
 
   return (
     <PageShell>
@@ -87,9 +124,9 @@ export function RequestTutorPage() {
             Request a Tutor
           </h1>
           <p className="mt-3 text-lg leading-relaxed text-ink-600">
-            Tell us what you need and our team will review your request and get back to you. It
-            takes about two minutes, and only the fields marked with{' '}
-            <span className="text-red-600">*</span> are required.
+            Answer a few short questions and our team will review your request and get back to you.
+            We will ask for your country first, so we can show you the right subjects, currency and
+            lesson times.
           </p>
 
           {/*
@@ -105,9 +142,7 @@ export function RequestTutorPage() {
               </p>
               <p className="mt-1 text-sm text-ink-600">
                 {tutorState.tutor.headline}
-                {tutorState.tutor.hourlyRate !== null
-                  ? ` · ${tutorState.tutor.hourlyRate} per hour`
-                  : ''}
+                {clientRate ? ` · ${clientRate} per hour` : ''}
               </p>
               <Link
                 to={`/tutors/${tutorState.tutor.id}`}
@@ -144,7 +179,7 @@ export function RequestTutorPage() {
                 We carried over your choices
               </p>
               <p className="mt-1 text-sm text-ink-600">
-                Change anything below before you send the request.
+                Change anything in the steps below before you send the request.
               </p>
               <ul className="mt-3 flex flex-wrap gap-2">
                 {carriedOver.map((item) => (
@@ -161,8 +196,9 @@ export function RequestTutorPage() {
           ) : null}
         </header>
 
-        <TutorRequestForm />
+        <TutorRequestWizard onSubmitted={() => setSubmitted(true)} />
       </Container>
     </PageShell>
   )
 }
+

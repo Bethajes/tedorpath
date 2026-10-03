@@ -18,7 +18,7 @@ const PROFILE_PATH = '/api/tutor-profile'
 /**
  * Converts the form's flat data into the shape the API expects.
  *
- * `hourlyRate` is submitted as a number (or null when the string is blank).
+ * The market rates are submitted as numbers (or null when the field is blank).
  * `languages` is split on commas so the user can type "English, French".
  */
 function toApiPayload(data: Partial<OnboardingFormData>): Record<string, unknown> {
@@ -38,9 +38,30 @@ function toApiPayload(data: Partial<OnboardingFormData>): Record<string, unknown
   if (data.education !== undefined) payload.education = data.education || null
   if (data.availability !== undefined) payload.availability = data.availability || null
 
-  if (data.hourlyRate !== undefined) {
-    const parsed = parseFloat(data.hourlyRate)
-    payload.hourlyRate = isNaN(parsed) ? null : parsed
+  /*
+   * Every market on the form is sent, each independently, as a map keyed by
+   * market code.
+   *
+   * A blank field becomes null rather than being dropped, so clearing a rate on
+   * the form clears it on the profile — omitting the key would leave the previous
+   * value in place and the tutor would have no way to take a price down.
+   *
+   * Sent as a map rather than the pre-markets `hourlyRateEtb`/`hourlyRateUsd`
+   * pair the API still accepts. That pair works, and keeping it working is
+   * deliberate; but a wizard that has to be told the name of each market it
+   * shows is a wizard that cannot show a market added later.
+   */
+  if (data.rates !== undefined) {
+    const rates: Record<string, number | null> = {}
+
+    for (const [marketCode, value] of Object.entries(data.rates)) {
+      // Trimmed before parsing: a field the tutor tabbed through and left
+      // containing a space is an empty rate, not a rate of 0.
+      const parsed = parseFloat(value.trim())
+      rates[marketCode] = value.trim() === '' || isNaN(parsed) ? null : parsed
+    }
+
+    payload.rates = rates
   }
 
   if (data.languages !== undefined) {

@@ -1,5 +1,205 @@
+import { Prisma } from '@prisma/client'
+
 import { prisma } from '../../lib/prisma.js'
 
+/**
+ * Markets: the currencies a tutor can sell into.
+ *
+ * Ethiopia is Tedor's primary local market; the international market is what
+ * everyone else buys in. Both live in the `markets` table, so adding a third is a
+ * row rather than a schema change — and nothing here converts between them. A
+ * tutor states their own price per market, and the only question this module ever
+ * answers is *which of those prices to show*.
+ *
+ * The list is read from the database rather than kept as a constant here and a
+ * duplicate in the frontend, because a third market that only half the system
+ * knows about is worse than no third market at all.
+ *
+ * Ethiopia is the default market: somebody who has told us nothing is served birr,
+ * because this is an Ethiopian marketplace. That is only the last resort — a
+ * country the learner has given us outranks it, and `resolveMarket` owns that order.
+ *
+ * Falls back to the shipped two when the table cannot be read, so a broken registry
+ * degrades to today's behaviour instead of taking the directory down.
+ */
+const FALLBACK_MARKETS = [
+  {
+    code: 'ETB',
+    name: 'Ethiopia',
+    currencyName: 'Ethiopian Birr',
+    symbol: 'Br',
+    decimals: 2,
+    priceFormat: 'code',
+    isDefault: true,
+    sortOrder: 0,
+  },
+  {
+    code: 'USD',
+    name: 'International',
+    currencyName: 'US Dollar',
+    symbol: '$',
+    decimals: 2,
+    priceFormat: 'symbol',
+    isDefault: false,
+    sortOrder: 1,
+  },
+]
+
+const RATE_SELECT = { select: { marketCode: true, amount: true } }
+
+const MARKET_SELECT = {
+  code: true,
+  name: true,
+  currencyName: true,
+  symbol: true,
+  decimals: true,
+  priceFormat: true,
+  isDefault: true,
+}
+
+/**
+ * Every active market, in the order they should be offered.
+ *
+ * The default is whatever the table marks as such, falling back to the last entry
+ * when the flag is missing or ambiguous — a directory with no prices on it is a
+ * worse outcome than one that guessed.
+ */
+export async function listMarkets() {
+  try {
+    const rows = await prisma.market.findMany({
+      where: { active: true },
+      orderBy: [{ sortOrder: 'asc' }, { code: 'asc' }],
+      select: MARKET_SELECT,
+    })
+
+    if (rows.length > 0) return rows
+  } catch (error) {
+    console.error('[tutors] failed to read markets, using the built-in list:', error)
+  }
+
+  return FALLBACK_MARKETS
+}
+
+/** The market served to a visitor who has told us nothing. */
+export async function defaultMarket() {
+  const markets = await listMarkets()
+  return markets.find((market) => market.isDefault) ?? markets.at(-1) ?? FALLBACK_MARKETS[0]
+}
+
+/**
+ * Whether a code names a market the platform offers.
+ *
+ * Returns false rather than throwing so a caller can decide between ignoring it
+ * (a profile link carrying a stale `?market=`) and rejecting it (the directory's
+ * 400, where an unrecognised value is a mistake worth naming).
+ */
+export async function isKnownMarket(code) {
+  if (!code) return false
+  const wanted = code.toUpperCase()
+  const markets = await listMarkets()
+  return markets.some((market) => market.code === wanted)
+}
+
+/**
+ * The market a learner's country buys in, or null when it implies none.
+ *
+ * Ethiopia is the only market named after one country, so it is the only one this
+ * function can answer from a country code. Everything else buys in the default
+ * market — a statement about how the platform is configured, not a claim that
+ * everyone outside Ethiopia pays in the same money.
+ */
+export async function marketForCountry(countryCode) {
+  if (!countryCode) return null
+  if (countryCode.toUpperCase() === 'ET') return 'ETB'
+  return (await defaultMarket()).code
+}
+
+/**
+ * The market to show one request's prices in.
+ *
+ * Nobody chooses this. The learner sees one price, in a currency the platform has
+ * worked out belongs to them, and there is no control anywhere in the interface
+ * that changes it. So this function is the whole of the market logic, and the order
+ * below is the whole of the design.
+ *
+ *   1. **`requested`** — an explicit `?market=` in the URL, if it names a market we
+ *      offer. Not something the interface produces any more. It is here so a link
+ *      somebody shared before this change keeps showing what it showed when it was
+ *      sent, which is the only reason it still exists.
+ *   2. **`savedCountry`** — the country on the person's account. An answer they
+ *      gave and kept, so it outranks anything inferred.
+ *   3. **`rememberedCountry`** — the country they picked in the request wizard,
+ *      held in a cookie. Above the network on purpose: somebody who chose Ethiopia
+ *      while on a VPN, or who has since flown, is still shopping for Ethiopia.
+ *      This is the only way an anonymous learner can have their choice respected at
+ *      all, since there is no account to save it to.
+ *   4. **`requestCountry`** — the country header the hosting platform sets. The
+ *      reason a brand-new visitor sees the right prices on their first page view
+ *      without being asked anything, which is what "invisible" has to mean.
+ *   5. **The default** — whatever `markets.is_default` says. Only reached when
+ *      nothing at all is known: a bare API client, or a proxy that sets no header.
+ *
+ * Every candidate is checked against the `markets` table, so a country whose market
+ * has been withdrawn falls through to the next source rather than producing a page
+ * where every price is missing.
+ *
+ * @param {object} [context]
+ * @param {string|null} [context.savedCountry] - `users.countryCode`, if known.
+ * @param {string|null} [context.rememberedCountry] - the country cookie, if set.
+ * @param {string|null} [context.requestCountry] - from the platform's headers.
+ * @param {string|null} [context.requested] - an explicit `?market=` value.
+ * @returns {Promise<{market: string, source: 'requested'|'saved'|'remembered'|'request'|'default'}>}
+ */
+export async function resolveMarket({
+  savedCountry,
+  rememberedCountry,
+  requestCountry,
+  requested,
+} = {}) {
+  if (requested && (await isKnownMarket(requested))) {
+    return { market: requested.toUpperCase(), source: 'requested' }
+  }
+
+  if (savedCountry) {
+    return { market: await marketForCountry(savedCountry), source: 'saved' }
+  }
+
+  if (rememberedCountry) {
+    return { market: await marketForCountry(rememberedCountry), source: 'remembered' }
+  }
+
+  if (requestCountry) {
+    return { market: await marketForCountry(requestCountry), source: 'request' }
+  }
+
+  return { market: (await defaultMarket()).code, source: 'default' }
+}
+
+/**
+ * A rate as the number the browser works with.
+ *
+ * Prisma returns a Decimal, which serialises as a string — so an unconverted
+ * value reaches the client as `"900.00"` where a number is expected. Null passes
+ * through: "this tutor does not price in this market" is a real answer, and
+ * turning it into 0 would advertise free lessons.
+ */
+export function toRate(value) {
+  if (value === null || value === undefined) return null
+  return parseFloat(value.toString())
+}
+
+/**
+ * The rate for one market from a profile's rate rows.
+ *
+ * ONE price, always labelled. The response deliberately carries no other market:
+ * a client holding both is one layout change away from showing a learner two
+ * prices for the same hour of teaching, which is the mistake this design exists to
+ * prevent.
+ */
+function rateForMarket(rates, market) {
+  const row = rates.find((rate) => rate.marketCode === market)
+  return row ? toRate(row.amount) : null
+}
 /**
  * TutorDetailDTO field selection — full public profile, never private User fields.
  * Superset of TutorCardDTO. Requirements: 5.4, 2.8, 16.1
@@ -12,7 +212,7 @@ const TUTOR_DETAIL_SELECT = {
   profilePhotoUrl: true,
   teachingMode: true,
   location: true,
-  hourlyRate: true,
+  rates: RATE_SELECT,
   studentLevels: true,
   languages: true,
   availability: true,
@@ -40,7 +240,7 @@ const TUTOR_CARD_SELECT = {
   profilePhotoUrl: true,
   teachingMode: true,
   location: true,
-  hourlyRate: true,
+  rates: RATE_SELECT,
   studentLevels: true,
   // Sent on the card so a visitor filtering by language can see why a tutor
   // matched, without opening the profile. Requirement: 30.6
@@ -60,7 +260,7 @@ const TUTOR_CARD_SELECT = {
  * Map a raw Prisma TutorProfile row into a TutorCardDTO.
  * Bio is truncated to 200 chars for the card view.
  */
-function toTutorCardDTO(profile) {
+function toTutorCardDTO(profile, market) {
   return {
     id: profile.id,
     displayName: profile.displayName,
@@ -69,9 +269,15 @@ function toTutorCardDTO(profile) {
     profilePhotoUrl: profile.profilePhotoUrl ?? null,
     teachingMode: profile.teachingMode,
     location: profile.location ?? null,
-    hourlyRate: profile.hourlyRate !== null && profile.hourlyRate !== undefined
-      ? parseFloat(profile.hourlyRate.toString())
-      : null,
+    // The rate for the market this listing was requested in, plus the market
+    // itself. The pair travels together so the client shows the price it was
+    // given rather than assuming the number it received is the one it asked for.
+    // The rate for the market this listing was requested in, and the market it is
+    // in. One price, never two: the pair travels together so the client cannot
+    // render a number it has not been told the unit of, and nothing else is sent
+    // so there is no second price available to display by mistake.
+    hourlyRate: rateForMarket(profile.rates, market),
+    hourlyRateCurrency: market,
     studentLevels: profile.studentLevels,
     languages: profile.languages,
     createdAt: profile.createdAt,
@@ -165,6 +371,77 @@ async function findProfileIdsByLanguage(term) {
 }
 
 /**
+ * Profile ids ordered by their price in one market.
+ *
+ * WHY NOT AN `orderBy`
+ *
+ * The price lives in a `tutor_profile_rates` row and Prisma cannot sort by a
+ * relation — only by columns on the model, or by aggregates on to-one relations.
+ * A rate-per-column schema would sort natively, and would also mean a migration
+ * every time a market is added, which is the thing being designed out.
+ *
+ * So the ordering is taken straight from the database and every filter stays in
+ * Prisma: `listTutors` builds its `where` exactly as it always has, and the
+ * ranked ids go in as one more condition. Only the ordering is hand-written, and
+ * it is the part with no subtlety to get wrong.
+ *
+ * Tutors with no rate in this market are simply absent from the ranking, so
+ * "cheapest first" can never present an unpriced tutor as the cheapest thing on
+ * the page.
+ *
+ * @param {string} market
+ * @param {boolean} ascending
+ * @returns {Promise<string[]>}
+ */
+async function rankedProfileIds(market, ascending) {
+  // The direction is built from a boolean, never from request input, so it cannot
+  // reach the query as anything but ASC or DESC.
+  const direction = ascending ? Prisma.sql`ASC` : Prisma.sql`DESC`
+
+  const rows = await prisma.$queryRaw(
+    Prisma.sql`
+      SELECT "tutorProfileId"
+      FROM "tutor_profile_rates"
+      WHERE "marketCode" = ${market}
+      ORDER BY "amount" ${direction}, "tutorProfileId" ASC
+    `,
+  )
+
+  return rows.map((row) => row.tutorProfileId)
+}
+
+/**
+ * Puts a page of cards back into price order.
+ *
+ * Prisma orders by a fixed column rather than by the order of an array, so the
+ * ranked ids cannot be re-imposed as an `ORDER BY`. Ordering the page's own rows
+ * in memory gives exactly the ranked order, because the page was already
+ * restricted to ids that came out of that ranking.
+ *
+ * @param {Array<object>} items
+ * @param {{market: string, ascending: boolean} | null} priceOrder
+ */
+function orderByPrice(items, priceOrder) {
+  if (!priceOrder) return items
+
+  const sorted = [...items].sort((a, b) => {
+    const left = a.hourlyRate
+    const right = b.hourlyRate
+
+    // Only reached if a row lost its rate between the query and the mapping, which
+    // nothing does today; sorted last rather than compared as null.
+    if (left === null || right === null) {
+      if (left === right) return 0
+      return left === null ? 1 : -1
+    }
+
+    return priceOrder.ascending ? left - right : right - left
+  })
+
+  return sorted
+}
+
+/**
  * List approved tutor profiles with optional filtering, sorting, and pagination.
  *
  * Requirements: 4.1–4.11
@@ -191,10 +468,19 @@ export async function listTutors({
   language,
   minRate,
   maxRate,
+  market,
   sort = 'recommended',
   page = 1,
   limit = 12,
 } = {}) {
+  /*
+   * Resolved once, here, so the filter, the sort and the response mapping cannot
+   * disagree about which market is in play — and so an unrecognised `?market=`
+   * is settled once rather than three times.
+   */
+  const activeMarket = (await isKnownMarket(market))
+    ? market.toUpperCase()
+    : (await defaultMarket()).code
   // Base where clause — APPROVED only, always
   const where = {
     profileStatus: 'APPROVED',
@@ -244,11 +530,21 @@ export async function listTutors({
     where.id = { in: await findProfileIdsByLanguage(language) }
   }
 
-  // Rate range filter
+  /*
+   * Rate range filter, applied to the row for the visitor's own market.
+   *
+   * This is why the filter takes a market at all. `minRate=10` is a different
+   * question for someone in Addis than for someone in London: birr against
+   * thousands of birr, dollars against tens of dollars. Filtering one market's
+   * price while showing another's would quietly return the wrong tutors, so the
+   * filter and the displayed price are held to the same one.
+   */
   if (minRate !== undefined || maxRate !== undefined) {
-    where.hourlyRate = {}
-    if (minRate !== undefined) where.hourlyRate.gte = minRate
-    if (maxRate !== undefined) where.hourlyRate.lte = maxRate
+    const range = {}
+    if (minRate !== undefined) range.gte = minRate
+    if (maxRate !== undefined) range.lte = maxRate
+
+    where.rates = { some: { marketCode: activeMarket, amount: range } }
   }
 
   // Free-text search.
@@ -302,11 +598,24 @@ export async function listTutors({
 
   // Build orderBy
   let orderBy
-  if (sort === 'price_asc') {
-    // nulls last via Prisma nulls option
-    orderBy = [{ hourlyRate: { sort: 'asc', nulls: 'last' } }, { createdAt: 'desc' }]
-  } else if (sort === 'price_desc') {
-    orderBy = [{ hourlyRate: { sort: 'desc', nulls: 'last' } }, { createdAt: 'desc' }]
+  /** Set only for a price sort; see the comment at the mapping below. */
+  let priceOrder = null
+  if (sort === 'price_asc' || sort === 'price_desc') {
+    // See `rankedProfileIds` for why the ordering is not an `orderBy`.
+    const ranked = await rankedProfileIds(activeMarket, sort === 'price_asc')
+
+    if (ranked.length === 0) {
+      // A market nobody prices in has nothing to rank. Falling back to the default
+      // ordering shows tutors rather than an empty directory.
+      orderBy = [{ updatedAt: 'desc' }, { createdAt: 'desc' }]
+    } else {
+      and.push({ id: { in: ranked } })
+      orderBy = [{ updatedAt: 'desc' }, { createdAt: 'desc' }]
+    }
+
+    // Sorted in memory below, once the page's rows are known — see the comment on
+    // the `items` mapping.
+    priceOrder = { market: activeMarket, ascending: sort === 'price_asc' }
   } else if (sort === 'newest') {
     orderBy = [{ createdAt: 'desc' }]
   } else {
@@ -334,7 +643,10 @@ export async function listTutors({
   const totalPages = total === 0 ? 0 : Math.ceil(total / limit)
 
   return {
-    items: items.map(toTutorCardDTO),
+    items: orderByPrice(
+      items.map((profile) => toTutorCardDTO(profile, activeMarket)),
+      priceOrder,
+    ),
     pagination: { page, limit, total, totalPages },
   }
 }
@@ -343,7 +655,7 @@ export async function listTutors({
  * Map a raw Prisma TutorProfile row into a TutorDetailDTO.
  * Full bio is included (not truncated).
  */
-function toTutorDetailDTO(profile) {
+function toTutorDetailDTO(profile, market) {
   return {
     id: profile.id,
     displayName: profile.displayName,
@@ -352,9 +664,15 @@ function toTutorDetailDTO(profile) {
     profilePhotoUrl: profile.profilePhotoUrl ?? null,
     teachingMode: profile.teachingMode,
     location: profile.location ?? null,
-    hourlyRate: profile.hourlyRate !== null && profile.hourlyRate !== undefined
-      ? parseFloat(profile.hourlyRate.toString())
-      : null,
+    // The rate for the market this listing was requested in, plus the market
+    // itself. The pair travels together so the client shows the price it was
+    // given rather than assuming the number it received is the one it asked for.
+    // The rate for the market this listing was requested in, and the market it is
+    // in. One price, never two: the pair travels together so the client cannot
+    // render a number it has not been told the unit of, and nothing else is sent
+    // so there is no second price available to display by mistake.
+    hourlyRate: rateForMarket(profile.rates, market),
+    hourlyRateCurrency: market,
     studentLevels: profile.studentLevels,
     languages: profile.languages,
     availability: profile.availability ?? null,
@@ -374,77 +692,15 @@ function toTutorDetailDTO(profile) {
  * @param {string} id - TutorProfile UUID
  * @returns {Promise<object|null>} TutorDetailDTO or null
  */
-export async function getTutorById(id) {
+export async function getTutorById(id, market) {
   const profile = await prisma.tutorProfile.findFirst({
     where: { id, profileStatus: 'APPROVED' },
     select: TUTOR_DETAIL_SELECT,
   })
 
   if (!profile) return null
-  return toTutorDetailDTO(profile)
-}
-
-/**
- * Count distinct non-blank values in a `groupBy` result.
- *
- * `groupBy` already collapses the rows in the database, so this only has to
- * discard values that are present but empty: `education` and `location` are
- * both free text a tutor may have left as an empty string, and counting a
- * blank as a distinct university or country would put a number on the homepage
- * that no record actually supports.
- */
-function countDistinctNonBlank(rows, field) {
-  const values = new Set()
-
-  for (const row of rows) {
-    const value = row[field]
-    if (typeof value === 'string' && value.trim() !== '') {
-      values.add(value.trim())
-    }
-  }
-
-  return values.size
-}
-
-/**
- * Aggregate counts for the public homepage.
- *
- * Every number here is a live count of real records — nothing is seeded or
- * hardcoded — so a brand new deployment honestly reports zeros and the
- * frontend renders non-numerical wording for them.
- *
- * Only APPROVED profiles contribute. A draft, rejected or suspended tutor is not
- * publicly visible, so counting one would overstate the marketplace.
- *
- * `universities` and `countries` are counted from tutor-authored free text
- * rather than a normalised table, so they are "how many distinct entries
- * approved tutors have written", not a verified institution or country list.
- * Requirements: 4.4
- *
- * @returns {Promise<{approvedTutors: number, subjects: number, universities: number, countries: number}>}
- */
-export async function getPublicStats() {
-  const approvedWhere = { profileStatus: 'APPROVED' }
-
-  const [approvedTutors, subjects, educationGroups, locationGroups] = await Promise.all([
-    prisma.tutorProfile.count({ where: approvedWhere }),
-    // Deactivated subjects are hidden from every picker, so they must not be
-    // counted as subjects a visitor can actually find a tutor for.
-    prisma.subject.count({ where: { active: true } }),
-    prisma.tutorProfile.groupBy({
-      by: ['education'],
-      where: { ...approvedWhere, education: { not: null } },
-    }),
-    prisma.tutorProfile.groupBy({
-      by: ['location'],
-      where: { ...approvedWhere, location: { not: null } },
-    }),
-  ])
-
-  return {
-    approvedTutors,
-    subjects,
-    universities: countDistinctNonBlank(educationGroups, 'education'),
-    countries: countDistinctNonBlank(locationGroups, 'location'),
-  }
+  return toTutorDetailDTO(
+    profile,
+    (await isKnownMarket(market)) ? market.toUpperCase() : (await defaultMarket()).code,
+  )
 }
